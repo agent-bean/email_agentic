@@ -1,0 +1,56 @@
+name: VPS connectivity
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: vps-connectivity
+  cancel-in-progress: false
+
+jobs:
+  ssh-check:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    environment: vps
+    steps:
+      - name: Verify deploy SSH and privilege boundary
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_DEPLOY_SSH_KEY: ${{ secrets.VPS_DEPLOY_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          : "${VPS_HOST:?Missing host}" "${VPS_PORT:?Missing port}"
+          : "${VPS_DEPLOY_SSH_KEY:?Missing deploy key}" "${VPS_KNOWN_HOSTS:?Missing pinned host key}"
+          ssh_dir=$(mktemp -d)
+          trap 'rm -rf "$ssh_dir"' EXIT
+          chmod 700 "$ssh_dir"
+          printf '%s\n' "$VPS_DEPLOY_SSH_KEY" > "$ssh_dir/key"
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          chmod 600 "$ssh_dir/key" "$ssh_dir/known_hosts"
+          ssh -T -i "$ssh_dir/key" -p "$VPS_PORT" \
+            -o BatchMode=yes -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$ssh_dir/known_hosts" \
+            -o GlobalKnownHostsFile=/dev/null -o ConnectTimeout=15 \
+            -o ServerAliveInterval=15 -o ServerAliveCountMax=2 \
+            "deploy@$VPS_HOST" 'bash -se' <<'REMOTE'
+          test "$(id -un)" = deploy
+          if id -Gn | tr ' ' '\n' | grep -Eq '^(sudo|docker|lxd)$'; then
+            echo 'Unexpected privileged group'; exit 1
+          fi
+          if sudo -n true 2>/dev/null; then
+            echo 'Unexpected sudo access'; exit 1
+          fi
+          test ! -r /home/email-admin/.ssh/authorized_keys
+          test ! -r /root/.ssh/authorized_keys
+          probe=$(mktemp /home/deploy/.ci-probe.XXXXXX)
+          trap 'rm -f "$probe"' EXIT
+          printf 'GitHub Actions SSH check\n' > "$probe"
+          test -s "$probe"
+          echo 'PASS: deploy SSH, home write, no privileged groups or sudo, admin keys protected.'
+          REMOTE

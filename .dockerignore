@@ -1,0 +1,25 @@
+# Credentials, local configuration, and runtime state
+.env
+.env.*
+.secrets
+.runtime
+.wrangler
+config/cloudflared.yml
+
+# Repository and local operational records
+.git
+.github
+plans
+docs
+
+# Local tooling and Python artifacts
+.venv
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.coverage
+htmlcov
+.DS_Store
+**/*.log
