@@ -3,6 +3,7 @@ import json
 import re
 import uuid
 from datetime import datetime, UTC
+from email.utils import parsedate_to_datetime
 from typing import TypedDict
 from urllib.parse import urlsplit, urlunsplit
 
@@ -27,6 +28,19 @@ def canonical_url(value):
     if parts.scheme not in {"http", "https"} or not parts.hostname:
         return None
     return urlunsplit((parts.scheme, parts.netloc.lower(), parts.path.rstrip("/") or "/", parts.query, ""))
+
+
+def publication_date(value):
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        date = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        try:
+            date = parsedate_to_datetime(value)
+        except (ValueError, TypeError, IndexError):
+            return None
+    return date if date.tzinfo else date.replace(tzinfo=UTC)
 
 
 def make_graph(container, checkpointer):
@@ -79,15 +93,11 @@ def make_graph(container, checkpointer):
                         url = canonical_url(item.get("url", ""))
                         if not url:
                             continue
-                        date = None
-                        try:
-                            date = datetime.fromisoformat(
-                                item.get("published_date", "").replace("Z", "+00:00")
-                            )
-                            if date.tzinfo is None:
-                                date = date.replace(tzinfo=UTC)
-                        except (ValueError, TypeError, AttributeError):
-                            pass
+                        date = publication_date(item.get("published_date"))
+                        # Query-matched excerpts precede page text so navigation cannot displace them.
+                        content = "\n\n".join(
+                            text for text in (item.get("content"), item.get("raw_content")) if text
+                        )[:8000]
                         await c.db.execute(
                             """INSERT INTO evidence(id,run_id,url,title,content,published_at)
                             VALUES(%s,%s,%s,%s,%s,%s) ON CONFLICT(run_id,url) DO NOTHING""",
@@ -96,7 +106,7 @@ def make_graph(container, checkpointer):
                                 run["id"],
                                 url,
                                 item.get("title", "")[:1000],
-                                (item.get("raw_content") or item.get("content") or "")[:8000],
+                                content,
                                 date,
                             ),
                         )
@@ -132,6 +142,13 @@ def make_graph(container, checkpointer):
             "completeness": "not_evaluated",
             "readiness": "requires_review",
             "branch_failures": [x["branch"] for x in branches if x["result"]["status"] == "failed"],
+            "search_failures": [
+                response["research_area"]
+                for branch in branches
+                if branch["branch"] == "web"
+                for response in (branch["result"].get("data") or [])
+                if response.get("status") == "failed"
+            ],
         }
         await c.reports.initial(run, draft, quality)
         await c.db.execute(

@@ -12,7 +12,9 @@ class Tavily:
             raise ProviderFailure("tavily")
         body = {
             "query": query,
-            "max_results": 15,
+            "search_depth": "advanced",
+            "chunks_per_source": 3,
+            "max_results": 8,
             "include_raw_content": True,
             "include_answer": False,
             "include_usage": True,

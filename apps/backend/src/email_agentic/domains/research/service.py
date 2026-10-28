@@ -33,8 +33,8 @@ class ResearchService:
             "target_seconds": self.settings.report_target_seconds,
             "timeout_seconds": self.settings.research_timeout_seconds,
             "model": self.settings.llm_model,
-            "workflow_version": 1,
-            "prompt_version": 1,
+            "workflow_version": 2,
+            "prompt_version": 2,
         }
         async with self.db.transaction() as connection:
             await connection.execute(

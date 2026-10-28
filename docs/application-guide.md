@@ -22,6 +22,12 @@ Một repo chứa React web và FastAPI backend. Web và backend có image riên
 
 Xác nhận đúng doanh nghiệp khác với duyệt phát hành. Bản báo cáo, body email, người nhận và lựa chọn phát hành phải được duyệt đúng phiên bản; sửa thì duyệt lại. Email có kết quả gửi chưa rõ phải đối chiếu trước khi gửi lại. Golden dùng chấm độc lập, không được đưa cho runtime hoặc model làm đáp án.
 
+Báo cáo và email dùng cách diễn đạt nghiệp vụ bình thường; nhãn nguồn gốc bộ kiểm thử chỉ giữ trong dữ liệu nội bộ. Nội dung từ email, lịch và hồ sơ được dẫn theo nguồn cung cấp, phân biệt với dữ kiện công khai đã xác minh. Quy tắc tạo nội dung nằm tại [ReportGenerationAgent](../apps/backend/src/email_agentic/agents/report_generation.py).
+
+Nghiên cứu web chia thành năm chủ đề: pháp nhân/quy mô, sản phẩm/công nghệ, triển khai/khách hàng, đối tác và tin mới. [WebResearchAgent](../apps/backend/src/email_agentic/agents/web_research.py) chỉ đưa tên/domain đã xác nhận vào tìm kiếm công khai; nội dung email/lịch được dùng khi tổng hợp. Tavily dùng tìm kiếm advanced, tối đa ba truy vấn đồng thời; một truy vấn lỗi vẫn giữ các kết quả còn lại. Cấu hình tìm kiếm do [Tavily integration](../apps/backend/src/email_agentic/integrations/tavily.py) sở hữu.
+
+Báo cáo cần có ví dụ cụ thể có nguồn, phân biệt công ty con với tập đoàn, giải thích liên hệ với nhu cầu và đề xuất câu hỏi cùng bước tiếp theo. Chỉ suy ra vai trò mua/bán từ bối cảnh rõ ràng; không mặc định công ty đang nghiên cứu là bên bán giải pháp cho người dùng. Liên hệ nghiệp vụ phải được ghi là phân tích, không biến thành nhu cầu đã xác nhận. Mục tin gần đây giới hạn 30 ngày; bối cảnh cũ ghi riêng kèm ngày. Email tóm tắt hướng tới 120–180 từ. Thiếu bằng chứng hoặc thu thập lỗi phải được nêu rõ. Trích đoạn có giới hạn nên báo cáo chưa thay việc đọc toàn văn nguồn. Năm truy vấn advanced có thể tăng chi phí và thời gian; mục tiêu 42 giây vẫn được đo riêng với deadline. Lượt mới lưu workflow/prompt phiên bản 2; bản cũ được giữ nguyên.
+
 ## Chạy local
 
 Cần Make, Docker Compose, uv và Node.js/npm. Xem build/runtime tại [web Dockerfile](../apps/web/Dockerfile), [backend Dockerfile](../apps/backend/Dockerfile), [backend manifest](../apps/backend/pyproject.toml) và [web manifest](../apps/web/package.json).
@@ -63,9 +69,11 @@ Hợp đồng HTTP do [OpenAPI/Pydantic](../apps/backend/src/email_agentic/api/r
 
 ## Trạng thái và giới hạn
 
-Đã kiểm chứng queue/checkpoint qua restart, version approval/outbox, lease, auth/Origin, golden hash và build. Google/Tavily đã đọc thật trong kiểm tra tích hợp. Báo cáo dài qua gateway vẫn gặp timeout hoặc response chưa đạt schema; chưa xác nhận toàn bộ luồng nghiên cứu chạy thành công hoặc đạt mục tiêu chất lượng/thời gian.
+Đã kiểm chứng queue/checkpoint qua restart, version approval/outbox, lease, auth/Origin, golden hash và build. Luồng local với Google/Tavily và gateway thật đã đi qua tạo nghiên cứu, xác nhận doanh nghiệp, tạo nháp, sửa và duyệt phiên bản mới với gửi email/lưu KB tắt. Đây là kiểm tra một ca, chưa phải nghiệm thu sáu ca hoặc chất lượng nội dung.
 
 `REPORT_TARGET_SECONDS` là mục tiêu chất lượng theo từng lượt; `RESEARCH_TIMEOUT_SECONDS` là ngân sách xử lý. Tăng ngân sách không đồng nghĩa đạt mục tiêu. Số đo hiện còn tính thời gian chờ xác nhận của người dùng.
+
+Request LLM dùng ngân sách cấu hình tại [LLM integration](../apps/backend/src/email_agentic/integrations/llm.py), thay vì bị timeout mặc định của HTTP client cắt ngắn. Khi cấu hình riêng có ngân sách quá thấp, có thể chạy local bằng `RESEARCH_TIMEOUT_SECONDS=180 make up`; override không được lưu vào file cấu hình. Lỗi mạng từ provider vẫn có thể xảy ra và không chứng minh model thiếu hỗ trợ schema.
 
 Chưa hoàn tất: tự kích hoạt nghiên cứu từ email/lịch, Gmail history cursor, PDF đầu vào, xuất PDF/Word và attachment bất biến, UI đối chiếu Sent, cleanup/retention, backup định kỳ và trace xuyên tiến trình. Scheduler mặc định tắt; dữ liệu đồng bộ chưa tự trở thành nghiên cứu. Golden còn nháp và frozen replay chưa triển khai; xem [hướng dẫn eval](evaluation-guide.md).
 
