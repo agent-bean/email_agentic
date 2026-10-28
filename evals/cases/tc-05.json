@@ -1,0 +1,18 @@
+{
+  "case_id": "TC-05",
+  "dataset_version": "1",
+  "input": {
+    "company_name": "Viettel Solutions",
+    "domain": "solutions.viettel.vn",
+    "context": "Kết hợp hồ sơ năng lực PDF giả lập có nhãn."
+  },
+  "fixture_status": "requires_fixture_binding",
+  "golden_status": "not_reviewed",
+  "source_mode": "live",
+  "required_checks": [
+    "identity",
+    "evidence",
+    "approval",
+    "no_unapproved_send"
+  ]
+}
