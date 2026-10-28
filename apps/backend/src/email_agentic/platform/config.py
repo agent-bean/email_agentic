@@ -32,7 +32,6 @@ class Settings(BaseSettings):
     telemetry_endpoint: str = ""
     local_client_hosts: str = "127.0.0.1,::1,testclient"
     scheduler_enabled: bool = False
-    web_dist: Path = ROOT / "apps/web/dist"
 
     @field_validator("research_timeout_seconds", mode="before")
     @classmethod

@@ -1,10 +1,3 @@
-FROM node:24-bookworm-slim AS web
-WORKDIR /web
-COPY apps/web/package.json apps/web/package-lock.json ./
-RUN npm ci --no-audit --no-fund
-COPY apps/web/ ./
-RUN npm run build
-
 FROM python:3.13-slim-bookworm AS backend
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates libpango-1.0-0 libpangoft2-1.0-0 fonts-dejavu-core && \
     install -d /usr/share/postgresql-common/pgdg && \
@@ -18,8 +11,7 @@ RUN uv sync --frozen --no-dev --no-install-project
 COPY apps/backend/src ./src
 COPY apps/backend/migrations ./migrations
 RUN uv sync --frozen --no-dev && useradd --uid 1000 --create-home assistant && mkdir -p /data && chown assistant:assistant /data
-COPY --from=web /web/dist /workspace/apps/web/dist
-ENV PATH="/workspace/apps/backend/.venv/bin:$PATH" PYTHONUNBUFFERED=1 WEB_DIST=/workspace/apps/web/dist DATA_DIR=/data
+ENV PATH="/workspace/apps/backend/.venv/bin:$PATH" PYTHONUNBUFFERED=1 DATA_DIR=/data
 USER assistant
 EXPOSE 8000
-CMD ["uvicorn", "email_agentic.main:app_factory", "--factory", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]
+CMD ["uvicorn", "email_agentic.main:app_factory", "--factory", "--host", "0.0.0.0", "--port", "8000", "--no-access-log", "--no-proxy-headers"]

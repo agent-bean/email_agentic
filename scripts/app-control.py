@@ -46,10 +46,10 @@ def main():
     ]
     commands = {
         "db": compose + ["up", "-d", "--wait", "postgres"],
-        "build": compose + ["build", "api"],
+        "build": compose + ["build", "api", "web"],
         "migrate": compose + ["run", "--rm", "migrate"],
         "up": compose
-        + ["up", "-d", "--wait", "api", "worker", "prometheus", "tempo", "grafana"],
+        + ["up", "-d", "--wait", "web", "api", "worker", "prometheus", "tempo", "grafana"],
         "down": compose + ["down"],
         "check": compose + ["config", "--quiet"],
         "status": compose + ["ps"],

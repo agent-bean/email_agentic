@@ -1,10 +1,8 @@
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 import jwt
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, Response, FileResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse, Response
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
@@ -65,15 +63,6 @@ def create_app(settings=None):
     @app.get("/metrics", include_in_schema=False)
     async def metrics():
         return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
-
-    if settings.web_dist.exists():
-        app.mount("/assets", StaticFiles(directory=settings.web_dist / "assets"), name="assets")
-
-        @app.get("/{path:path}", include_in_schema=False)
-        async def web(path: str):
-            if path.startswith(("api/", "health/", "metrics")):
-                return JSONResponse({"detail": "Not found"}, status_code=404)
-            return FileResponse(Path(settings.web_dist) / "index.html")
 
     return app
 

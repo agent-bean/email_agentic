@@ -2,8 +2,8 @@ name: email-agentic
 x-backend: &backend
   build:
     context: ..
-    dockerfile: infra/Dockerfile
-  image: email-agentic:local
+    dockerfile: apps/backend/Dockerfile
+  image: email-agentic-backend:local
   init: true
   restart: unless-stopped
   read_only: true
@@ -37,6 +37,26 @@ x-backend: &backend
       condition: service_healthy
   networks: [application]
 services:
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+    image: email-agentic-web:local
+    init: true
+    restart: unless-stopped
+    user: "101:101"
+    read_only: true
+    tmpfs: ["/tmp:size=32m,uid=101,gid=101"]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    ports: ["127.0.0.1:8000:8080"]
+    networks: [application]
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
   postgres:
     image: postgres:18-bookworm
     restart: unless-stopped
@@ -54,7 +74,6 @@ services:
     mem_limit: 1g
   api:
     <<: *backend
-    ports: ["127.0.0.1:8000:8000"]
     mem_limit: 768m
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready')"]
