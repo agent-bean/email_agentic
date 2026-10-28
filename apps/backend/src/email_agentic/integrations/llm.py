@@ -24,7 +24,8 @@ class LLM:
             "llm",
             "POST",
             self.settings.llm_base_url.rstrip("/") + "/chat/completions",
-            deadline_seconds=min(90, self.settings.research_timeout_seconds),
+            deadline_seconds=self.settings.research_timeout_seconds,
+            timeout=self.settings.research_timeout_seconds,
             headers={
                 "Authorization": "Bearer " + self.settings.llm_api_key.get_secret_value(),
                 "User-Agent": "email-agentic/0.1",

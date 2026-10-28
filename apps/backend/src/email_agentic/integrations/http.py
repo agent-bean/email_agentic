@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import httpx
 from email_agentic.platform.errors import ProviderFailure
 
@@ -7,7 +8,11 @@ async def json_request(client, provider, method, url, deadline_seconds=45, **kwa
     try:
         async with asyncio.timeout(deadline_seconds):
             response = await client.request(method, url, **kwargs)
-    except (TimeoutError, httpx.RequestError):
+    except (TimeoutError, httpx.RequestError) as exc:
+        logging.getLogger(__name__).warning(
+            "Provider transport failed: provider=%s error=%s budget_seconds=%s",
+            provider, type(exc).__name__, deadline_seconds,
+        )
         raise ProviderFailure(
             provider,
             transient=True,
