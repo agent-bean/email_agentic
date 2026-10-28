@@ -4,7 +4,7 @@
   "input": {
     "company_name": "Viettel Solutions",
     "domain": "solutions.viettel.vn",
-    "context": "Kết hợp hồ sơ năng lực PDF giả lập có nhãn."
+    "context": "Kết hợp hồ sơ năng lực PDF đính kèm với thông tin từ website, ghi rõ nguồn."
   },
   "fixture_status": "requires_fixture_binding",
   "golden_status": "not_reviewed",

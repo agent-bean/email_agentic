@@ -2,6 +2,7 @@
   "version": 1,
   "status": "requires_binding",
   "google_manifest": ".runtime/google-demo/manifest.json",
+  "local_bindings": "evals/fixtures/private/bindings.json",
   "synthetic": true,
-  "notes": "Bind existing seeded provider IDs; do not seed again. This manifest contains no golden answers."
+  "notes": "Bind existing seeded provider IDs; do not seed again. Local bindings are private and absent from a fresh clone. Cross-check source and case references with original provider records; Gmail may rewrite Message-ID. This manifest contains no golden answers."
 }
