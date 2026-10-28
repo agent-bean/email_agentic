@@ -1,0 +1,19 @@
+services:
+  api:
+    environment:
+      APP_ENV: local
+      LOCAL_CLIENT_HOSTS: "127.0.0.1,::1,172.29.41.1"
+  worker:
+    environment:
+      APP_ENV: local
+  migrate:
+    environment:
+      APP_ENV: local
+  postgres:
+    ports: ["127.0.0.1:5432:5432"]
+networks:
+  application:
+    ipam:
+      config:
+        - subnet: 172.29.41.0/24
+          gateway: 172.29.41.1

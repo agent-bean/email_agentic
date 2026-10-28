@@ -1,0 +1,111 @@
+name: email-agentic
+x-backend: &backend
+  build:
+    context: ..
+    dockerfile: infra/Dockerfile
+  image: email-agentic:local
+  init: true
+  restart: unless-stopped
+  read_only: true
+  tmpfs: ["/tmp:size=128m"]
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: ["ALL"]
+  environment: &environment
+    APP_ENV: production
+    GOOGLE_TEST_ACCOUNT_EMAIL: ${GOOGLE_TEST_ACCOUNT_EMAIL:?Set the mailbox owner}
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set the database password}
+    POSTGRES_HOST: postgres
+    LLM_BASE_URL: ${LLM_BASE_URL:-}
+    LLM_API_KEY: ${LLM_API_KEY:-}
+    LLM_MODEL: ${LLM_MODEL:-}
+    TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+    GOOGLE_OAUTH_TOKEN_FILE: /run/secrets/google-token.json
+    GOOGLE_CALENDAR_ID: ${GOOGLE_CALENDAR_ID:-primary}
+    APP_ORIGIN: ${APP_ORIGIN:-http://127.0.0.1:8000}
+    CF_TEAM_DOMAIN: ${CF_TEAM_DOMAIN:-}
+    CF_AUDIENCE: ${CF_AUDIENCE:-}
+    REPORT_TARGET_SECONDS: ${REPORT_TARGET_SECONDS:-42}
+    RESEARCH_TIMEOUT_SECONDS: ${RESEARCH_TIMEOUT_SECONDS:-180}
+    TELEMETRY_ENDPOINT: http://tempo:4318/v1/traces
+  volumes:
+    - app-data:/data
+  secrets:
+    - source: google-token
+      target: google-token.json
+  depends_on:
+    postgres:
+      condition: service_healthy
+  networks: [application]
+services:
+  postgres:
+    image: postgres:18-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: email_agentic
+      POSTGRES_DB: email_agentic
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set the database password}
+    volumes: ["postgres-data:/var/lib/postgresql"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U email_agentic -d email_agentic"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    networks: [application]
+    mem_limit: 1g
+  api:
+    <<: *backend
+    ports: ["127.0.0.1:8000:8000"]
+    mem_limit: 768m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  worker:
+    <<: *backend
+    command: ["python", "-m", "email_agentic.worker"]
+    environment:
+      <<: *environment
+      SCHEDULER_ENABLED: ${SCHEDULER_ENABLED:-false}
+    mem_limit: 2g
+  migrate:
+    <<: *backend
+    profiles: ["maintenance"]
+    restart: "no"
+    command: ["python", "-m", "email_agentic.platform.migrate", "--backup-dir", "/data/backups"]
+  prometheus:
+    image: prom/prometheus:v3.7.3
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=30d"]
+    volumes: ["./prometheus.yml:/etc/prometheus/prometheus.yml:ro", "prometheus-data:/prometheus"]
+    networks: [application]
+    mem_limit: 512m
+  tempo:
+    image: grafana/tempo:2.9.0
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes: ["./tempo.yaml:/etc/tempo.yaml:ro", "tempo-data:/var/tempo"]
+    networks: [application]
+    mem_limit: 768m
+  grafana:
+    image: grafana/grafana:12.3.0
+    ports: ["127.0.0.1:3000:3000"]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set a separate Grafana password}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks: [application]
+    mem_limit: 512m
+secrets:
+  google-token:
+    file: ../.secrets/google/token.json
+volumes:
+  postgres-data:
+  app-data:
+  prometheus-data:
+  tempo-data:
+  grafana-data:
+networks:
+  application:

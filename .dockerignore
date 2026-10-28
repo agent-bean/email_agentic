@@ -23,3 +23,8 @@ docs
 htmlcov
 .DS_Store
 **/*.log
+
+# Runtime images must not include dependency caches or evaluation answers
+**/node_modules
+**/dist
+evals

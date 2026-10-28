@@ -10,6 +10,8 @@
 config/cloudflared.yml
 docs/*
 !docs/ci-guide.md
+!docs/application-guide.md
+!docs/evaluation-guide.md
 plans/
 
 # Local tooling and Python artifacts
@@ -22,4 +24,14 @@ __pycache__/
 .coverage
 htmlcov/
 .DS_Store
+*.tsbuildinfo
 *.log
+
+# Application output and private evaluation answers
+node_modules/
+dist/
+evals/golden/*
+!evals/golden/.gitkeep
+evals/results/*
+!evals/results/.gitkeep
+evals/fixtures/private/
