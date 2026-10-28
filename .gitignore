@@ -8,10 +8,8 @@
 
 # Machine-specific infrastructure and operational records
 config/cloudflared.yml
-docs/*
-!docs/ci-guide.md
-!docs/application-guide.md
-!docs/evaluation-guide.md
+docs/deployment-guide.md
+docs/references/source-catalog.md
 plans/
 
 # Local tooling and Python artifacts

@@ -4,12 +4,13 @@
 
 ## Kiến trúc đã chọn
 
-Một repo chứa React web và FastAPI backend. API phục vụ giao diện cùng origin và nhận yêu cầu; worker chạy workflow LangGraph cố định. Bảy vai trò được giữ trong cùng backend, không dùng agent lead hoặc bảy dịch vụ riêng. Cách chia này giữ việc triển khai và điều tra lỗi vừa với phạm vi một người dùng, một hộp thư và một lịch.
+Một repo chứa React web và FastAPI backend. Web và backend có image riêng để cập nhật/rollback giao diện độc lập; API và worker dùng chung image backend vì dùng cùng code và dependencies. Web chuyển tiếp API cùng origin để giữ một đường đăng nhập. Worker chạy workflow LangGraph cố định. Bảy vai trò được giữ trong cùng backend, không dùng agent lead hoặc bảy dịch vụ riêng.
 
 | Điểm vào | Trách nhiệm |
 |---|---|
 | [Web](../apps/web/src/app/app.tsx) | Giao diện theo nghiệp vụ, xem/sửa và duyệt |
-| [API](../apps/backend/src/email_agentic/main.py) | HTTP, xác thực và bản build React |
+| [Web server](../apps/web/nginx.conf) | React, SPA fallback và proxy API cùng origin |
+| [API](../apps/backend/src/email_agentic/main.py) | HTTP và xác thực |
 | [Worker](../apps/backend/src/email_agentic/worker.py) | Nhận việc, resume và lịch quét |
 | [Workflow](../apps/backend/src/email_agentic/workflows/research.py) | Điều phối các bước và chờ người xác nhận |
 | [Bootstrap](../apps/backend/src/email_agentic/bootstrap.py) | Nối domains, agents, tools và integrations |
@@ -23,23 +24,24 @@ Xác nhận đúng doanh nghiệp khác với duyệt phát hành. Bản báo c�
 
 ## Chạy local
 
-Cần Docker Compose, uv và Node.js/npm. Xem phiên bản runtime/dependency tại [Dockerfile](../infra/Dockerfile), [backend manifest](../apps/backend/pyproject.toml) và [web manifest](../apps/web/package.json).
+Cần Make, Docker Compose, uv và Node.js/npm. Xem build/runtime tại [web Dockerfile](../apps/web/Dockerfile), [backend Dockerfile](../apps/backend/Dockerfile), [backend manifest](../apps/backend/pyproject.toml) và [web manifest](../apps/web/package.json).
 
 Tạo `.env` theo [.env.example](../.env.example) nếu chưa có. Điền chủ hộp thư, mật khẩu PostgreSQL/Grafana, gateway/model và Tavily; đặt token OAuth runtime tại đường dẫn cấu hình. Không ghi đè cấu hình đã có. Model chỉ cần khai báo qua `LLM_MODEL`.
 
-Helper [app-control.py](../scripts/app-control.py) chỉ thao tác stack local; không SSH hoặc triển khai VPS. Chạy từ root repo:
+[Makefile](../Makefile) gọi helper [app-control.py](../scripts/app-control.py) để thao tác stack local; không SSH hoặc triển khai VPS. Xem các lệnh tại `make help`. Chạy tuần tự từ root repo:
 
 ```sh
-uv sync --project apps/backend
-npm ci --prefix apps/web
-uv run --project apps/backend python scripts/app-control.py check
-uv run --project apps/backend python scripts/app-control.py db
-uv run --project apps/backend python scripts/app-control.py build
-uv run --project apps/backend python scripts/app-control.py migrate
-APP_ORIGIN=http://127.0.0.1:8000 uv run --project apps/backend python scripts/app-control.py up
+make setup
+make check
+make db
+make build
+make migrate
+make up
 ```
 
-App ở `http://127.0.0.1:8000`, Grafana ở `http://127.0.0.1:3000`. Helper ưu tiên biến shell hơn `.env`; override origin ở lệnh trên không sửa file cấu hình. Local auth chỉ dành cho truy cập local. Production cần Cloudflare Access theo [config/auth](../apps/backend/src/email_agentic/platform/auth.py); chưa có bước deploy ứng dụng trong helper.
+App ở `http://127.0.0.1:8000`, Grafana ở `http://127.0.0.1:3000`. Port app thuộc web; API chỉ ở mạng Compose. `make up` mặc định origin local; có thể override bằng biến shell `APP_ORIGIN`, không sửa `.env`. Local auth chỉ dành cho truy cập local, tin địa chỉ web cố định trong [local Compose](../infra/compose.local.yaml); không tin header giả địa chỉ client. Production cần Cloudflare Access bảo vệ toàn bộ hostname theo [config/auth](../apps/backend/src/email_agentic/platform/auth.py); chưa có bước deploy ứng dụng trong helper.
+
+Web và backend phải giữ tương thích hợp đồng API khi cập nhật riêng. Nếu API dừng, giao diện vẫn tải được nhưng các thao tác cần API sẽ lỗi. Health của web chỉ xác nhận web server; `/health/ready` kiểm tra API/DB qua proxy. Metrics backend chỉ dành cho mạng nội bộ.
 
 Token Google chỉ được mount read-only cho runtime. Container hiện chạy UID 1000; file phải đọc được bởi UID này, không đổi secret thành file cho mọi người đọc. Token seed không được mount. Không chạy seed lại trên dữ liệu demo đã chuẩn bị.
 
@@ -48,10 +50,11 @@ Migration phải chạy tường minh trước khi mở API/worker. Dump trướ
 ## Kiểm tra và dừng
 
 ```sh
-uv run --project apps/backend python scripts/app-control.py test
-npm run build --prefix apps/web
-uv run --project apps/backend python scripts/app-control.py status
-uv run --project apps/backend python scripts/app-control.py down
+make test
+make lint
+make web-build
+make status
+make down
 ```
 
 `test` cần PostgreSQL và image đã dựng, tạo backup trước khi ghi dữ liệu và dùng DB riêng `email_agentic_test`. Lệnh này chỉ dành cho stack thử local. `down` dừng container và giữ volume/backup.
@@ -66,4 +69,4 @@ Hợp đồng HTTP do [OpenAPI/Pydantic](../apps/backend/src/email_agentic/api/r
 
 Chưa hoàn tất: tự kích hoạt nghiên cứu từ email/lịch, Gmail history cursor, PDF đầu vào, xuất PDF/Word và attachment bất biến, UI đối chiếu Sent, cleanup/retention, backup định kỳ và trace xuyên tiến trình. Scheduler mặc định tắt; dữ liệu đồng bộ chưa tự trở thành nghiên cứu. Golden còn nháp và frozen replay chưa triển khai; xem [hướng dẫn eval](evaluation-guide.md).
 
-Tài liệu vận hành riêng, cấu hình thật, golden và kết quả thử được giữ ngoài Git theo [.gitignore](../.gitignore).
+Tài liệu sản phẩm/kiến trúc được theo dõi trong Git. Checklist vận hành riêng và danh mục đường dẫn tài liệu gốc trên máy, cấu hình thật, golden và kết quả thử được giữ ngoài Git theo [.gitignore](../.gitignore).
