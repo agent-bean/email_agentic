@@ -542,7 +542,7 @@ dd {
 .email-body {
   font-size:var(--lg);
   padding-bottom:var(--s6)}
-.original-context-body {
+.source-email-body,.research-context-body {
   font-size:var(--lg);
   overflow-wrap:anywhere}
 .source-list {

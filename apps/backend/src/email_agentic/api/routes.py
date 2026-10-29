@@ -25,6 +25,10 @@ class RunSummary(BaseModel):
     config: dict
 
 
+class RunRecord(RunSummary):
+    source_email: str | None = None
+
+
 class ReportRow(BaseModel):
     id: UUID
     run_id: UUID
@@ -55,7 +59,7 @@ class ActionRow(BaseModel):
 
 
 class RunDetail(BaseModel):
-    run: RunSummary
+    run: RunRecord
     reports: list[ReportRow]
     approvals: list[ApprovalRow]
     actions: list[ActionRow]

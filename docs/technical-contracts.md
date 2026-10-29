@@ -10,6 +10,7 @@ Xem [kiến trúc](system-architecture.md) để hiểu hệ thống và checkli
 | --- | --- |
 | Doanh nghiệp | ID nội bộ, tên pháp nhân, domain chính thức và bằng chứng đối chiếu. Không tự gộp theo tên/email cá nhân hoặc gộp công ty mẹ/con. |
 | Email/cuộc họp | ID nguồn, phiên bản, attachment và thông tin nguồn gốc nội bộ. Bản sao trong ứng dụng không cho phép tự xóa nguồn Google. |
+| Email nguồn của nghiên cứu | `source_email` là text do người dùng cung cấp, lưu nguyên trạng, tách khỏi `context` (yêu cầu nghiên cứu) và email nháp. Không lọc nhãn/đổi nội dung khi hiển thị. Run cũ không có nguồn riêng giữ null; không suy diễn từ context hoặc domain. Chưa liên kết tự động với Gmail. Chỉ trả nội dung email trong chi tiết run của đúng owner, không đưa vào danh sách tổng quan. |
 | Tác vụ | Ai yêu cầu, lý do, đầu vào, doanh nghiệp, thời điểm nhận, ngưỡng đánh giá thời gian đã chọn (mặc định 42 giây), hạn dừng xử lý và kết quả từng nhánh. Retry thuộc cùng tác vụ. |
 | Bằng chứng và dữ kiện | Nội dung, nguồn, URL/ID tài liệu, trang/đoạn, thời điểm thu thập, ngày xuất bản nếu xác minh được. Phân biệt fact, suy luận và chưa xác minh; giữ nguồn mâu thuẫn và thông tin nguồn gốc nội bộ. |
 | Phiên bản báo cáo | Markdown, nguồn trích, người sửa, thời điểm, nháp/chính thức. Không sửa đè bản đã đưa ra duyệt. |

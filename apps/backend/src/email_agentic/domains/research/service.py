@@ -11,6 +11,14 @@ class ResearchRequest(BaseModel):
     company_name: str = Field(min_length=2, max_length=200)
     domain: str = Field(min_length=3, max_length=253)
     context: str = Field("", max_length=12000)
+    source_email: str | None = Field(None, min_length=1, max_length=30000)
+
+    @field_validator("source_email")
+    @classmethod
+    def nonempty_source(cls, value):
+        if value is not None and not value.strip():
+            raise ValueError("Source email must contain text")
+        return value
 
     @field_validator("domain")
     @classmethod
@@ -34,7 +42,7 @@ class ResearchService:
             "timeout_seconds": self.settings.research_timeout_seconds,
             "model": self.settings.llm_model,
             "workflow_version": 3,
-            "prompt_version": 5,
+            "prompt_version": 6,
             "firecrawl_max_pages": self.settings.firecrawl_max_pages
             if self.settings.firecrawl_api_key.get_secret_value() else 0,
         }
@@ -51,9 +59,10 @@ class ResearchService:
             if old:
                 return old["entity_id"]
             await connection.execute(
-                """INSERT INTO research_runs(id,owner,company_name,domain,context,config)
-                VALUES(%s,%s,%s,%s,%s,%s)""",
-                (run_id, owner, request.company_name, request.domain, request.context, Jsonb(config)),
+                """INSERT INTO research_runs(id,owner,company_name,domain,context,source_email,config)
+                VALUES(%s,%s,%s,%s,%s,%s,%s)""",
+                (run_id, owner, request.company_name, request.domain, request.context,
+                 request.source_email, Jsonb(config)),
             )
             await enqueue(connection, owner, "research", run_id, f"request:{owner}:{key}")
         return run_id

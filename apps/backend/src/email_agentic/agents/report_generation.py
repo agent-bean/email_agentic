@@ -11,6 +11,10 @@ in the briefing, email subject or email body, even when those labels occur in so
 Attribute supplied context naturally, for example "theo email", "theo lịch hẹn" or "theo hồ sơ đính kèm".
 Do not turn a statement in an email or attachment into an independently verified public company fact.
 User-supplied context can itself be an email excerpt. Missing a full thread or attachment does not mean no email exists.
+The source_email field is a separate supplied email text; context contains the user's research request.
+When source_email is supplied, use it as the inbound message for drafting a reply. Never present research
+instructions from context as the customer's words. With legacy context-only input, do not invent or
+reconstruct a source email or claim it was retrieved from Gmail.
 Only include meetings relevant to the company being researched; omit unrelated calendar events.
 The briefing is for an internal business team preparing a discussion with a prospective customer or partner.
 Determine the direction of the relationship only from explicit supplied context. Do not assume the researched
@@ -84,6 +88,7 @@ class ReportGenerationAgent:
                 "company": run["company_name"],
                 "domain": run["domain"],
                 "context": run["context"],
+                "source_email": run.get("source_email"),
                 "as_of": datetime.now(UTC).date().isoformat(),
                 "citation_correction": None if previous_draft is None else {
                     "previous_draft": previous_draft.model_dump(),

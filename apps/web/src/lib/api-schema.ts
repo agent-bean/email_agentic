@@ -334,10 +334,12 @@ export interface components {
              * @default
              */
             context: string;
+            /** Source Email */
+            source_email?: string | null;
         };
         /** RunDetail */
         RunDetail: {
-            run: components["schemas"]["RunSummary"];
+            run: components["schemas"]["RunRecord"];
             /** Reports */
             reports: components["schemas"]["ReportRow"][];
             /** Approvals */
@@ -356,6 +358,39 @@ export interface components {
             usage: {
                 [key: string]: unknown;
             }[];
+        };
+        /** RunRecord */
+        RunRecord: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Company Name */
+            company_name: string;
+            /** Domain */
+            domain: string;
+            /** Context */
+            context: string;
+            /** Status */
+            status: string;
+            /** Version */
+            version: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Elapsed Seconds */
+            elapsed_seconds: number | null;
+            /** Error Code */
+            error_code: string | null;
+            /** Config */
+            config: {
+                [key: string]: unknown;
+            };
+            /** Source Email */
+            source_email?: string | null;
         };
         /** RunSummary */
         RunSummary: {
