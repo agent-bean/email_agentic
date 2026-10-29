@@ -11,6 +11,7 @@ from typing import TypedDict
 from urllib.parse import urlsplit, urlunsplit
 
 from langgraph.graph import StateGraph, START, END
+from psycopg.types.json import Jsonb
 
 from email_agentic.agents.calendar import CalendarAgent
 from email_agentic.agents.company_info import CompanyInfoAgent
@@ -59,6 +60,36 @@ def cited_urls(text):
             value = value[:-1]
         urls.add(canonical_url(value))
     return urls
+
+
+def prd_timing(run, ready_at=None):
+    """Include queued/retry time; subtract only a completely recorded human wait."""
+    result = {
+        "prd_timing_basis": "received_to_markdown_excluding_identity_wait",
+        "prd_elapsed_seconds": None,
+        "identity_wait_seconds": None,
+        "prd_time_target_met": None,
+        "markdown_ready_at": ready_at.isoformat() if ready_at else None,
+    }
+    timing = run["config"].get("timing") or {}
+    if ready_at is None or timing.get("version") != 1:
+        return result
+    try:
+        received, waiting, confirmed = (
+            datetime.fromisoformat(timing[key])
+            for key in ("received_at", "identity_wait_started_at", "identity_confirmed_at")
+        )
+        if any(value.tzinfo is None for value in (received, waiting, confirmed, ready_at)):
+            return result
+        if not received <= waiting <= confirmed <= ready_at or not run["identity_confirmed"]:
+            return result
+        excluded = (confirmed - waiting).total_seconds()
+        elapsed = (ready_at - received).total_seconds() - excluded
+    except (KeyError, TypeError, ValueError):
+        return result
+    result.update(prd_elapsed_seconds=elapsed, identity_wait_seconds=excluded,
+                  prd_time_target_met=elapsed <= run["config"]["target_seconds"])
+    return result
 
 
 def make_graph(container, checkpointer):
@@ -197,6 +228,7 @@ def make_graph(container, checkpointer):
             "timing_basis": "active_processing",
             "target_seconds": run["config"]["target_seconds"],
             "time_target_met": elapsed <= run["config"]["target_seconds"],
+            **prd_timing(run),
             "factual_accuracy": "requires_review",
             "completeness": "not_evaluated",
             "readiness": "requires_review",
@@ -226,7 +258,11 @@ def make_graph(container, checkpointer):
                 for status in ("succeeded", "failed", "not_selected")
             },
         }
-        await c.reports.initial(run, draft, quality)
+        # Persist first, then mark readiness: database/KB preparation belongs to latency too.
+        report_id = await c.reports.initial(run, draft, quality)
+        timing = prd_timing(run, datetime.now(UTC))
+        await c.db.execute("UPDATE reports SET quality=quality || %s WHERE id=%s",
+                           (Jsonb(timing), report_id))
         await c.db.execute(
             "UPDATE research_runs SET elapsed_seconds=%s,status='draft_ready' WHERE id=%s",
             (elapsed, run["id"]),

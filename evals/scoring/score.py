@@ -33,6 +33,27 @@ def source_links(text):
     return links
 
 
+def prd_elapsed(run, report):
+    """Recompute acceptance latency from timestamps, independently of runtime totals."""
+    timing = run.get("config", {}).get("timing") or {}
+    if timing.get("version") != 1:
+        return None, None
+    try:
+        received, waiting, confirmed = (
+            datetime.fromisoformat(timing[key])
+            for key in ("received_at", "identity_wait_started_at", "identity_confirmed_at")
+        )
+        ready = datetime.fromisoformat(report.get("quality", {})["markdown_ready_at"])
+        if any(value.tzinfo is None for value in (received, waiting, confirmed, ready)):
+            return None, None
+        if not received <= waiting <= confirmed <= ready:
+            return None, None
+    except (KeyError, TypeError, ValueError):
+        return None, None
+    excluded = (confirmed - waiting).total_seconds()
+    return (ready - received).total_seconds() - excluded, excluded
+
+
 def score(output, golden, golden_sha, review=None):
     output_sha = hashlib.sha256(canonical(output)).hexdigest()
     reports = output.get("reports", [])
@@ -60,8 +81,9 @@ def score(output, golden, golden_sha, review=None):
     evidence = {normalize(item["url"]): item for item in output.get("evidence", [])}
     supported = citations & evidence.keys()
     run = output["run"]
-    measured = run.get("elapsed_seconds")
+    measured, identity_wait = prd_elapsed(run, report)
     target = run["config"]["target_seconds"]
+    time_target_met = measured <= target if measured is not None else None
     reference = (
         datetime.fromisoformat(run["created_at"])
         if golden.source_mode == "live"
@@ -110,8 +132,7 @@ def score(output, golden, golden_sha, review=None):
         and not all_links - evidence.keys()
         and review.get("distinct_sources_verified") is True
         and review.get("news_freshness_passed") is True
-        and measured is not None
-        and measured <= target
+        and time_target_met is True
     )
     return {
         "eligible": eligible,
@@ -130,8 +151,12 @@ def score(output, golden, golden_sha, review=None):
         "news_freshness_passed": review.get("news_freshness_passed")
         if valid_review
         else None,
-        "elapsed_seconds": measured,
+        "elapsed_seconds": run.get("elapsed_seconds"),
+        "timing_basis": report.get("quality", {}).get("timing_basis"),
+        "prd_elapsed_seconds": measured,
+        "prd_timing_basis": "received_to_markdown_excluding_identity_wait",
+        "identity_wait_seconds": identity_wait,
         "target_seconds": target,
-        "time_target_met": measured is not None and measured <= target,
-        "note": "URL count and string structure alone do not establish factual accuracy or independent sources.",
+        "time_target_met": time_target_met,
+        "note": "URL count, provider dates and string structure alone do not establish factual accuracy, independent sources or news freshness. Active processing time cannot establish PRD latency.",
     }

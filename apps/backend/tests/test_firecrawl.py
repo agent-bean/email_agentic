@@ -133,8 +133,8 @@ async def test_new_run_records_page_limit_without_persisting_api_key(db):
         )
         run = await c.research.get(owner, run_id)
         assert run["config"]["firecrawl_max_pages"] == 4
-        assert run["config"]["workflow_version"] == 6
-        assert run["config"]["prompt_version"] == 10
+        assert run["config"]["workflow_version"] == 7
+        assert run["config"]["prompt_version"] == 11
         assert run["config"]["duckduckgo_enabled"] is True
         assert "test-only" not in json.dumps(run["config"])
 
@@ -189,3 +189,28 @@ async def test_failed_page_read_preserves_best_available_duplicate_excerpt():
     for item in responses[0]["results"]:
         assert item["raw_content"] == "Specific documented deployment outcome"
         assert item["page_read"] == {"status": "failed", "error_code": "http_403"}
+
+
+async def test_page_read_retains_article_publication_metadata_without_promoting_header_or_update_dates():
+    class Pages:
+        async def execute(self, *args):
+            return {
+                "markdown": "Website header: 29 October 2026\nArticle published: 4 July 2026\nDetails",
+                "metadata": {
+                    "article:published_time": "2026-07-04T09:00:00Z",
+                    "datePublished": "2026-07-04",
+                    "modifiedTime": "2026-10-29",
+                    "date": "2026-10-29",
+                    "title": "Article",
+                },
+            }
+
+    responses = [{"results": [{"url": "https://example.com/article", "published_date": "2026-10-29"}]}]
+    await WebResearchAgent(Pages(), read_pages=1).read_sources(responses, None)
+    item = responses[0]["results"][0]
+    assert item["page_read"]["publication_metadata"] == {
+        "article:published_time": "2026-07-04T09:00:00Z", "datePublished": "2026-07-04",
+    }
+    # Search date remains separate so conflicting dates can be reviewed rather than silently overwritten.
+    assert item["published_date"] == "2026-10-29"
+    assert "4 July 2026" in item["raw_content"]

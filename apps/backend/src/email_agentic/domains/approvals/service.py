@@ -38,7 +38,12 @@ class Approvals:
                 )
             await self.companies.confirm(connection, run)
             await connection.execute(
-                "UPDATE research_runs SET identity_confirmed=true,status='queued',version=version+1 WHERE id=%s",
+                """UPDATE research_runs SET identity_confirmed=true,status='queued',version=version+1,
+                config=CASE WHEN config->'timing'->>'version'='1'
+                    AND config->'timing' ? 'identity_wait_started_at'
+                    AND NOT (config->'timing' ? 'identity_confirmed_at')
+                    THEN jsonb_set(config,'{timing,identity_confirmed_at}',to_jsonb(clock_timestamp()))
+                    ELSE config END WHERE id=%s""",
                 (run_id,),
             )
             await enqueue(connection, owner, "resume", run_id, f"identity:{run_id}:{version}")

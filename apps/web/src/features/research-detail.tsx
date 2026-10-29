@@ -6,14 +6,14 @@ import { api, post, type Detail, type Report, type ReportEdit } from '../lib/api
 import { ErrorMessage, Status } from '../components/status';
 import { Attachments, MeetingSource, type MeetingEvent, type SourceMessage } from './inbox';
 
-const qualityLabels: Record<string, string> = { cited_sources: 'Nguồn trích dẫn', source_target_met: 'Đủ số nguồn mục tiêu', elapsed_seconds: 'Thời gian tạo nháp (giây)', target_seconds: 'Mục tiêu thời gian (giây)', time_target_met: 'Đạt mục tiêu thời gian', factual_accuracy: 'Độ chính xác', completeness: 'Độ đầy đủ', readiness: 'Sẵn sàng sử dụng', branch_failures: 'Bước gặp lỗi', search_failures: 'Lỗi tìm kiếm', page_reads: 'Đọc trang web', citation_correction_attempted: 'Đã yêu cầu sửa link nguồn', human_edited: 'Đã chỉnh sửa', content_review: 'Kiểm tra nội dung', succeeded: 'Thành công', failed: 'Lỗi', not_selected: 'Không chọn đọc' };
+const qualityLabels: Record<string, string> = { cited_sources: 'Nguồn trích dẫn', source_target_met: 'Đủ số nguồn mục tiêu', elapsed_seconds: 'Thời gian xử lý chủ động (giây)', target_seconds: 'Mục tiêu thời gian (giây)', time_target_met: 'Xử lý chủ động trong mục tiêu', prd_elapsed_seconds: 'Thời gian nhận yêu cầu đến có nháp (giây)', prd_time_target_met: 'Đạt mục tiêu thời gian đầu-cuối', identity_wait_seconds: 'Thời gian chờ xác nhận đã loại trừ (giây)', timing_basis: 'Cách đo thời gian xử lý', prd_timing_basis: 'Cách đo thời gian đầu-cuối', markdown_ready_at: 'Thời điểm có nháp', factual_accuracy: 'Độ chính xác', completeness: 'Độ đầy đủ', readiness: 'Sẵn sàng sử dụng', branch_failures: 'Bước gặp lỗi', search_failures: 'Lỗi tìm kiếm', page_reads: 'Đọc trang web', citation_correction_attempted: 'Đã yêu cầu sửa link nguồn', human_edited: 'Đã chỉnh sửa', content_review: 'Kiểm tra nội dung', succeeded: 'Thành công', failed: 'Lỗi', not_selected: 'Không chọn đọc' };
 function qualityValue(value: unknown): string {
   if (value == null) return '—';
   if (typeof value === 'boolean') return value ? 'Có' : 'Không';
   if (Array.isArray(value)) return value.map(qualityValue).join(', ') || 'Không có';
   if (typeof value === 'object') return Object.entries(value).map(([key, item]) => `${qualityLabels[key] ?? key}: ${qualityValue(item)}`).join(' · ');
   if (typeof value === 'number') return Number.isInteger(value) ? String(value) : value.toFixed(1);
-  return ({ requires_review: 'Cần kiểm tra', required: 'Cần kiểm tra', not_evaluated: 'Chưa đánh giá' } as Record<string, string>)[String(value)] ?? String(value);
+  return ({ active_processing: 'Chỉ tính xử lý; không gồm queue và chờ xác nhận', received_to_markdown_excluding_identity_wait: 'Gồm queue; loại thời gian chờ xác nhận đã ghi nhận', requires_review: 'Cần kiểm tra', required: 'Cần kiểm tra', not_evaluated: 'Chưa đánh giá' } as Record<string, string>)[String(value)] ?? String(value);
 }
 const branchLabels: Record<string, string> = { company: 'Doanh nghiệp', email: 'Email', calendar: 'Lịch họp', web: 'Nguồn web', memory: 'Ngữ cảnh đã lưu', knowledge: 'Kho tri thức' };
 const dateTime = (value: string) => new Date(value).toLocaleString('vi-VN');

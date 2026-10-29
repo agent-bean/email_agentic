@@ -115,3 +115,44 @@ async def test_secondary_provider_queue_does_not_occupy_active_search_slots():
     finally:
         release_secondary.set()
         await task
+
+
+async def test_report_retains_persisted_evidence_tail_and_marks_provider_dates_unverified():
+    class CapturingLLM:
+        async def structured(self, run_id, schema, system, payload):
+            return {"system": system, **json.loads(payload)}
+
+    content = "Evidence body. " * 450 + "Specific documented outcome in the final paragraph."
+    result = await ReportGenerationAgent(CapturingLLM()).run(
+        {"id": "run", "company_name": "Company", "domain": "example.com", "context": "meeting"},
+        [{"url": "https://example.com/article", "content": content, "published_at": "2026-10-28"}],
+        [],
+    )
+    assert result["evidence"][0]["content"] == content
+    assert result["evidence"][0]["publication_date_status"] == "unverified_provider_date"
+    assert "website header" in result["system"]
+    assert "purpose and documented outcomes" in result["system"]
+
+
+async def test_all_search_areas_use_confirmed_entity_without_restricting_counterpart_sources():
+    class Searches:
+        requests = []
+
+        async def execute(self, name, request, context):
+            assert name == "web.search"
+            self.requests.append(request)
+            return {"results": []}
+
+    tools = Searches()
+    result = await WebResearchAgent(tools, duckduckgo_enabled=True).run(
+        {"company_name": "Example Regional Subsidiary", "domain": "example.com"}, None
+    )
+    assert {row["research_area"] for row in result} == {
+        "identity", "products", "deployments", "partners", "adoption", "news",
+    }
+    assert len(tools.requests) == 12
+    for request in tools.requests:
+        assert "Example Regional Subsidiary" in request["query"]
+        assert "example.com" in request["query"]
+        assert "site:" not in request["query"]
+    assert sum(request["news"] for request in tools.requests) == 2

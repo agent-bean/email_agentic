@@ -15,10 +15,12 @@ class WebResearchAgent:
         domain = run["domain"]
         # Only confirmed company identity enters public search, never email or meeting context.
         queries = [
-            ("identity", f"{company} site:{domain} company legal entity annual report employees revenue", False),
-            ("products", f"{company} site:{domain} products platforms technology solutions", False),
-            ("deployments", f"{company} case study customer deployment results implementation", False),
-            ("partners", f"{company} strategic partnership technology partner agreement", False),
+            # The confirmed domain disambiguates the entity without excluding
+            # regulators, customer accounts or counterpart announcements.
+            ("identity", f"{company} {domain} company legal entity annual report employees revenue", False),
+            ("products", f"{company} {domain} company business products platforms technology services", False),
+            ("deployments", f"{company} {domain} case study customer deployment results implementation", False),
+            ("partners", f"{company} {domain} partnership cooperation technology partner agreement", False),
             ("adoption", f"{company} {domain} digital transformation ERP CRM AI automation implementation", False),
             ("news", f"{company} {domain} announcements business technology investment", True),
         ]
@@ -87,7 +89,18 @@ class WebResearchAgent:
                     data = await self.tools.execute(
                         "web.scrape", {"url": url, "timeout_seconds": min(15, remaining)}, context
                     )
-                    return {"status": "succeeded", "markdown": data["markdown"][:12000]}
+                    result = {"status": "succeeded", "markdown": data["markdown"][:12000]}
+                    # Keep article-specific date candidates apart from search dates.
+                    # Generic/update metadata can describe the site header, not the article.
+                    metadata = data.get("metadata") or {}
+                    publication_metadata = {
+                        key: metadata[key][:200]
+                        for key in ("article:published_time", "datePublished", "publishedTime", "published_time")
+                        if isinstance(metadata, dict) and isinstance(metadata.get(key), str)
+                    }
+                    if publication_metadata:
+                        result["publication_metadata"] = publication_metadata
+                    return result
                 except ProviderFailure as exc:
                     return {"status": "failed", "error_code": exc.category}
                 except ToolDenied as exc:

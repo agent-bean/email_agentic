@@ -43,11 +43,12 @@ class ResearchService:
     async def create(self, owner, request, key):
         run_id = uuid.uuid4()
         config = {
+            "timing": {"version": 1, "received_at": datetime.now(UTC).isoformat()},
             "target_seconds": self.settings.report_target_seconds,
             "timeout_seconds": self.settings.research_timeout_seconds,
             "model": self.settings.llm_model,
-            "workflow_version": 6,
-            "prompt_version": 10,
+            "workflow_version": 7,
+            "prompt_version": 11,
             "duckduckgo_enabled": self.settings.duckduckgo_enabled,
             "firecrawl_max_pages": self.settings.firecrawl_max_pages
             if self.settings.firecrawl_api_key.get_secret_value() else 0,
@@ -137,6 +138,10 @@ class ResearchService:
 
     async def status(self, run_id, status, error=None):
         await self.db.execute(
-            "UPDATE research_runs SET status=%s,error_code=%s,updated_at=now() WHERE id=%s",
-            (status, error, run_id),
+            """UPDATE research_runs SET status=%s,error_code=%s,updated_at=now(),
+            config=CASE WHEN %s='awaiting_identity' AND config->'timing'->>'version'='1'
+                AND NOT (config->'timing' ? 'identity_wait_started_at')
+                THEN jsonb_set(config,'{timing,identity_wait_started_at}',to_jsonb(clock_timestamp()))
+                ELSE config END WHERE id=%s""",
+            (status, error, status, run_id),
         )
