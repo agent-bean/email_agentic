@@ -4,6 +4,7 @@ from urllib.parse import urlsplit
 from ddgs import DDGS
 from ddgs.exceptions import DDGSException, RatelimitException, TimeoutException
 
+from email_agentic.integrations.http import bounded_retry
 from email_agentic.platform.errors import ProviderFailure
 
 
@@ -12,22 +13,37 @@ class DuckDuckGo:
         self.enabled = enabled
         # Keep the unkeyed provider to one active request per application process.
         self.slots = asyncio.Semaphore(1)
+        self.cooldown_until = 0
 
     async def search(self, query, news=False):
         if not self.enabled:
             raise ProviderFailure("duckduckgo", category="disabled")
         async with self.slots:
-            # DDGS is synchronous; its HTTP timeout also bounds work after task cancellation.
-            task = asyncio.create_task(asyncio.to_thread(self._search, query, news))
+            if asyncio.get_running_loop().time() < self.cooldown_until:
+                raise ProviderFailure("duckduckgo", category="rate_limited")
+
+            async def request(remaining):
+                return await self._request(query, news)
+
             try:
-                return await asyncio.shield(task)
-            except asyncio.CancelledError:
-                # Hold the slot until the bounded HTTP work exits, even on workflow cancellation.
-                try:
-                    await task
-                except Exception:
-                    pass
+                return await bounded_retry(request, 20, provider="duckduckgo")
+            except ProviderFailure as exc:
+                if exc.category in {"rate_limited", "search_failed"}:
+                    self.cooldown_until = asyncio.get_running_loop().time() + 10
                 raise
+
+    async def _request(self, query, news):
+        # DDGS is synchronous; its HTTP timeout also bounds work after task cancellation.
+        task = asyncio.create_task(asyncio.to_thread(self._search, query, news))
+        try:
+            return await asyncio.shield(task)
+        except asyncio.CancelledError:
+            # Hold the slot until the bounded HTTP work exits, even on workflow cancellation.
+            try:
+                await task
+            except Exception:
+                pass
+            raise
 
     def _search(self, query, news):
         try:

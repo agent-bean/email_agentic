@@ -1,13 +1,15 @@
+import asyncio
 from ipaddress import ip_address
 from urllib.parse import urlsplit
 
-from email_agentic.integrations.http import json_request
+from email_agentic.integrations.http import bounded_retry, json_request
 from email_agentic.platform.errors import ProviderFailure
 
 
 class Firecrawl:
     def __init__(self, client, key):
         self.client, self.key = client, key
+        self.cooldown_until = 0
 
     async def scrape(self, url, timeout_seconds=15):
         try:
@@ -28,17 +30,28 @@ class Firecrawl:
             raise ProviderFailure("firecrawl", category="invalid_url")
         if not self.key:
             raise ProviderFailure("firecrawl", category="not_configured")
-        response = await json_request(
-            self.client, "firecrawl", "POST", "https://api.firecrawl.dev/v2/scrape",
-            deadline_seconds=timeout_seconds, timeout=timeout_seconds,
-            headers={"Authorization": f"Bearer {self.key}"},
-            json={
-                "url": url, "formats": ["markdown"], "onlyMainContent": True,
-                "parsers": [],
-                "timeout": max(1000, int((timeout_seconds - 1) * 1000)),
-                "skipTlsVerification": False,
-            },
-        )
+        if asyncio.get_running_loop().time() < self.cooldown_until:
+            raise ProviderFailure("firecrawl", category="rate_limited")
+
+        async def request(remaining):
+            return await json_request(
+                self.client, "firecrawl", "POST", "https://api.firecrawl.dev/v2/scrape",
+                deadline_seconds=remaining, timeout=remaining,
+                headers={"Authorization": f"Bearer {self.key}"},
+                json={
+                    "url": url, "formats": ["markdown"], "onlyMainContent": True,
+                    "parsers": [],
+                    "timeout": max(1000, int((remaining - 1) * 1000)),
+                    "skipTlsVerification": False,
+                },
+            )
+
+        try:
+            response = await bounded_retry(request, timeout_seconds, provider="firecrawl")
+        except ProviderFailure as exc:
+            if exc.category == "http_429":
+                self.cooldown_until = asyncio.get_running_loop().time() + max(5, exc.retry_after or 0)
+            raise
         if not isinstance(response, dict) or response.get("success") is not True:
             raise ProviderFailure("firecrawl", category="invalid_receipt")
         data = response.get("data")

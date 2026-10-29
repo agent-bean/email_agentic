@@ -1,7 +1,42 @@
 import asyncio
 import logging
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
+
 import httpx
+
 from email_agentic.platform.errors import ProviderFailure
+
+
+def retry_delay(value):
+    try:
+        return max(0, float(value))
+    except (TypeError, ValueError):
+        try:
+            return max(0, (parsedate_to_datetime(value) - datetime.now(UTC)).total_seconds())
+        except (TypeError, ValueError, OverflowError):
+            return None
+
+
+async def bounded_retry(operation, budget, *, provider):
+    deadline = asyncio.get_running_loop().time() + budget
+    for attempt in range(3):
+        remaining = deadline - asyncio.get_running_loop().time()
+        try:
+            async with asyncio.timeout(max(0, remaining)):
+                return await operation(remaining)
+        except TimeoutError:
+            raise ProviderFailure(provider, transient=True, category="network_or_timeout") from None
+        except ProviderFailure as exc:
+            delay = exc.retry_after if exc.retry_after is not None else 0.25 * 2 ** attempt
+            if (
+                not exc.transient
+                or exc.ambiguous
+                or attempt == 2
+                or delay >= deadline - asyncio.get_running_loop().time()
+            ):
+                raise
+            await asyncio.sleep(delay)
 
 
 async def json_request(client, provider, method, url, deadline_seconds=45, **kwargs):
@@ -38,6 +73,7 @@ async def json_request(client, provider, method, url, deadline_seconds=45, **kwa
             transient=rate_limited or response.status_code in {408, 429, 500, 502, 503, 504},
             ambiguous=provider == "gmail" and method == "POST" and response.status_code >= 500,
             category=category,
+            retry_after=retry_delay(response.headers.get("Retry-After")),
         )
     try:
         return response.json()
