@@ -9,13 +9,13 @@ Xem [kiến trúc](system-architecture.md) để hiểu hệ thống và checkli
 | Nhóm dữ liệu | Nội dung và quy tắc chính |
 | --- | --- |
 | Doanh nghiệp | ID nội bộ, tên pháp nhân, domain chính thức và bằng chứng đối chiếu. Không tự gộp theo tên/email cá nhân hoặc gộp công ty mẹ/con. |
-| Email/cuộc họp | ID nguồn, phiên bản, attachment và nhãn dữ liệu mẫu. Bản sao trong ứng dụng không cho phép tự xóa nguồn Google. |
+| Email/cuộc họp | ID nguồn, phiên bản, attachment và thông tin nguồn gốc nội bộ. Bản sao trong ứng dụng không cho phép tự xóa nguồn Google. |
 | Tác vụ | Ai yêu cầu, lý do, đầu vào, doanh nghiệp, thời điểm nhận, ngưỡng đánh giá thời gian đã chọn (mặc định 42 giây), hạn dừng xử lý và kết quả từng nhánh. Retry thuộc cùng tác vụ. |
-| Bằng chứng và dữ kiện | Nội dung, nguồn, URL/ID tài liệu, trang/đoạn, thời điểm thu thập, ngày xuất bản nếu xác minh được. Phân biệt fact, suy luận và chưa xác minh; giữ nguồn mâu thuẫn và nhãn dữ liệu mẫu. |
+| Bằng chứng và dữ kiện | Nội dung, nguồn, URL/ID tài liệu, trang/đoạn, thời điểm thu thập, ngày xuất bản nếu xác minh được. Phân biệt fact, suy luận và chưa xác minh; giữ nguồn mâu thuẫn và thông tin nguồn gốc nội bộ. |
 | Phiên bản báo cáo | Markdown, nguồn trích, người sửa, thời điểm, nháp/chính thức. Không sửa đè bản đã đưa ra duyệt. |
-| Gói phát hành | Phiên bản báo cáo, tiêu đề/nội dung email, To/Cc/Bcc, tệp và mã kiểm tra nội dung, định dạng, lựa chọn gửi/thông báo/lưu KB. |
-| Đề nghị duyệt | Chủ báo cáo, gói cố định, thời điểm tạo/hết hạn và quyết định. Hạn 24 giờ; sai người, sai phiên bản hoặc quá hạn đều không hợp lệ. |
-| Kết quả phát hành | Từng hành động gửi/lưu, khóa chống trùng, số lần thử và xác nhận từ dịch vụ. Gửi email và ghi KB có kết quả riêng. |
+| Nội dung và tùy chọn gửi/lưu | Phiên bản báo cáo, email nháp gồm tiêu đề/nội dung và To/Cc/Bcc, tệp và mã kiểm tra nội dung, định dạng, lựa chọn gửi/thông báo/lưu KB. |
+| Yêu cầu duyệt | Chủ báo cáo, phiên bản cố định, thời điểm tạo/hết hạn và quyết định. Hạn 24 giờ; sai người, sai phiên bản hoặc quá hạn đều không hợp lệ. |
+| Kết quả gửi/lưu | Từng hành động gửi/lưu, khóa chống trùng, số lần thử và xác nhận từ dịch vụ. Gửi email và ghi KB có kết quả riêng. |
 | Memory và KB | Ngữ cảnh, nguồn, phiên bản và trạng thái duyệt. Memory có thể giữ nháp; KB chỉ nhận bản chính thức đã duyệt. |
 | Tiến độ worker | Tác vụ đang nhận, thời hạn giữ việc, lần thử, checkpoint và trace ID. Worker hết quyền giữ việc không được tiếp tục ghi kết quả. |
 
@@ -23,12 +23,12 @@ Không lưu secret vào dữ liệu nghiệp vụ, prompt hoặc checkpoint. Gi�
 
 ## Phê duyệt có nghĩa gì?
 
-**Người dùng duyệt cả gói phát hành, không chỉ đoạn văn báo cáo.** Backend kiểm đúng người, phiên bản, thời hạn và lựa chọn trước khi thực thi.
+**Người dùng duyệt cả nội dung, người nhận và tùy chọn gửi/lưu, không chỉ báo cáo.** Backend kiểm đúng người, phiên bản, thời hạn và lựa chọn trước khi thực thi. UI tách Báo cáo và Email nháp; email hiện được lưu trong ứng dụng, chưa tạo draft trên Gmail. Khi bật gửi email, phê duyệt cho phép gửi nội dung đó tới người nhận đã chọn.
 
 1. Nháp và tệp xem trước có nhãn chưa duyệt. Người dùng xem được đúng nội dung và attachment sẽ phát hành.
 2. Mỗi đề nghị giữ một bản cố định. Hai tab sửa/duyệt cùng lúc phải kiểm phiên bản và cập nhật trong giao dịch DB; bản cũ không ghi đè bản mới.
-3. Sửa nội dung, người nhận, tệp hoặc lựa chọn thì tạo gói mới và duyệt lại. Gói đã duyệt giữ làm lịch sử, không truyền quyền duyệt sang bản sửa.
-4. Nếu hành động cũ chưa chạy mà gói đã thay, chặn hành động cũ. Nếu đã gửi, giữ kết quả thật; không giả vờ có thể thu hồi.
+3. Sửa nội dung, người nhận, tệp hoặc lựa chọn thì tạo phiên bản mới và duyệt lại. Bản đã duyệt giữ làm lịch sử, không truyền quyền duyệt sang bản sửa.
+4. Nếu hành động cũ chưa chạy mà nội dung đã thay, chặn hành động cũ. Nếu đã gửi, giữ kết quả thật; không giả vờ có thể thu hồi.
 5. Sau duyệt chỉ xuất từ bản đã chốt, không để model viết lại. Tạo lại tệp làm đổi nội dung thì phải duyệt lại.
 6. Lưu quyết định duyệt và danh sách hành động trong cùng giao dịch DB. Worker thực hiện đúng danh sách đó; không tự thêm người nhận hoặc ghi KB.
 
@@ -50,7 +50,7 @@ Mỗi nhánh trả: tác vụ/lần chạy, vai trò, trạng thái, dữ kiện
 
 Theo [thiết kế ứng dụng](system-architecture.md), agent không gọi trực tiếp SDK hoặc repository. Lời gọi thao tác đi qua tool executor; workflow ghi kết quả qua service nghiệp vụ. State/checkpoint chỉ giữ dữ liệu điều phối và tham chiếu tới phiên bản nghiệp vụ; không dùng checkpoint làm nguồn chuẩn của quyết định duyệt. Kết quả song song hợp nhất theo branch/evidence ID, không nối trùng khi chạy lại.
 
-Quyền theo trách nhiệm trong [bảng bảy vai trò](system-architecture.md): Web Research không gửi email; Report không tự phát hành; Memory không tự ghi KB trước duyệt. Câu trả lời model không phải quyết định duyệt. Quyền tạo dữ liệu mẫu tách khỏi quyền agent chạy nghiệp vụ.
+Quyền theo trách nhiệm trong [bảng bảy vai trò](system-architecture.md): Web Research không gửi email; Report không tự phát hành; Memory không tự ghi KB trước duyệt. Câu trả lời model không phải quyết định duyệt. Quyền chuẩn bị bộ kiểm thử tách khỏi quyền agent chạy nghiệp vụ.
 
 ## Tool được kiểm soát ra sao?
 
@@ -98,7 +98,7 @@ Retry có một bộ đếm do runtime sở hữu cho từng thao tác, kể c�
 
 ## API và kiểm thử cần giữ điều gì?
 
-API phục vụ đầu vào/cuộc họp, tạo nghiên cứu, tiến độ/nguồn, xác nhận danh tính, sửa phiên bản, duyệt, kết quả gửi/lưu, hồ sơ/KB, kết nối và dữ liệu mẫu.
+API phục vụ đầu vào/cuộc họp, tạo nghiên cứu, tiến độ/nguồn, xác nhận danh tính, sửa phiên bản, duyệt, kết quả gửi/lưu, hồ sơ/KB và kết nối. Bộ kiểm thử được chuẩn bị qua công cụ riêng.
 
 Mọi thay đổi phải kiểm người dùng, quyền sở hữu và phiên bản; lệnh gửi lặp có khóa chống trùng. Bản lỗi thời trả xung đột. Không tin bản chính thức do frontend tự khai. Dùng cookie thì kiểm CSRF; Cloudflare Access không thay quyền nghiệp vụ. Danh sách có phân trang và giới hạn dữ liệu.
 
