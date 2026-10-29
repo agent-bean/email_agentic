@@ -108,4 +108,9 @@ Mọi thay đổi phải kiểm người dùng, quyền sở hữu và phiên b�
 
 Cấu hình bao phủ tích hợp, model/giá, giới hạn tool, DB/tệp, domain/Access, lịch, thời gian lưu và telemetry. Tên endpoint/biến cụ thể sẽ do OpenAPI và mẫu cấu hình không chứa secret quy định khi có code.
 
-Kiểm thử tập trung vào chống trùng, duyệt/sửa đồng thời, sai quyền/hết hạn, sáu gate, restart khi chờ duyệt, gửi chưa rõ kết quả, KB lỗi sau gửi, nguồn và cách đếm nguồn. Đáp án đánh giá nằm ngoài vùng agent được đọc. Kiểm thử hẹp có thể dùng mock; nghiệm thu tích hợp cần tài khoản và thao tác thật. **Chưa chạy kiểm thử runtime.**
+Kiểm thử tập trung vào chống trùng, duyệt/sửa đồng thời, sai quyền/hết hạn, sáu gate, restart khi chờ duyệt, gửi chưa rõ kết quả, KB lỗi sau gửi, nguồn và cách đếm nguồn. Đáp án đánh giá nằm ngoài vùng agent được đọc. Kiểm thử hẹp có thể dùng mock; nghiệm thu tích hợp cần tài khoản và thao tác thật. Bằng chứng chạy kiểm tra nằm trong báo cáo thực thi; không dùng trạng thái kế hoạch này để kết luận nghiệm thu.
+
+
+### Nguồn Calendar
+
+Meeting là nguồn riêng với email; API không nhận đồng thời hai nguồn cho một run. Snapshot lịch giữ nguyên dữ liệu Google. Đề xuất phải gắn calendar, event instance và revision liên quan nghiệp vụ; metadata như etag không làm tạo nghiên cứu mới. Lịch thay đổi, bị hủy hoặc không còn sắp tới phải được đồng bộ và kiểm lại trước xác nhận và nghiên cứu. Hợp đồng thực thi nằm tại [ResearchRequest/ResearchService](../apps/backend/src/email_agentic/domains/research/service.py), [Approvals](../apps/backend/src/email_agentic/domains/approvals/service.py) và [kiểm tra Calendar](../apps/backend/tests/test_calendar_automation.py).

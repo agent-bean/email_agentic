@@ -211,9 +211,9 @@ Còn phải kiểm chứng khi triển khai: tương thích package/gateway, ren
 
 ## 10. Nền tảng hiện có và phần còn lại
 
-Source đã có React, API/worker, migration có backup, queue PostgreSQL, checkpoint LangGraph, bảy vai trò và tool harness. Luồng tạo nghiên cứu thủ công → xác nhận domain → thu thập thật → nháp → sửa/duyệt → outbox email/KB đã được nối trong source. Đã đọc Google/Tavily thật; bước tạo báo cáo dài chưa qua kiểm chứng gateway (timeout hoặc response chưa đạt schema). Chưa xác nhận toàn bộ luồng thực chạy thành công. Compose có Prometheus, Tempo, Grafana; đã triển khai VPS qua Cloudflare Access.
+Điểm vào runtime và các luồng hiện có được dẫn tại [hướng dẫn ứng dụng](application-guide.md); backend giữ cùng ranh giới domains, agents, tools và integrations. Calendar intake dùng cùng ResearchService và bước xác nhận danh tính như email intake, không thêm agent lead hoặc scheduler service. [CalendarAutomation](../apps/backend/src/email_agentic/domains/inbox/calendar.py) sở hữu revision của cuộc họp, nguồn lịch nguyên bản và chống trùng; thay đổi/hủy lịch không được âm thầm dùng đề xuất cũ.
 
-Chưa coi là hoàn tất PRD: tự kích hoạt nghiên cứu từ lịch, phân tích PDF, xuất PDF/Word và attachment bất biến, đối chiếu Sent trên UI, cleanup/retention. Backup định kỳ do [script và systemd timer](vps-release-guide.md#backup-và-rollback) sở hữu. Luồng web dùng năm chủ đề cố định qua Tavily và DuckDuckGo; cấu hình/giới hạn hiện tại xem [hướng dẫn ứng dụng](application-guide.md). Luôn yêu cầu xác nhận danh tính. Đo thời gian hiện gồm cả lúc chờ xác nhận nên chưa dùng để chứng minh mục tiêu 42 giây. Trace hiện ở API/job/tool, chưa nối đầy đủ ngữ cảnh xuyên tiến trình.
+Phần chưa hoàn tất PRD và ý nghĩa thời gian xử lý do [trạng thái và giới hạn](application-guide.md#trạng-thái-và-giới-hạn) sở hữu. Không dùng một lượt thành công hoặc owner duyệt nội dung để kết luận đã đạt toàn bộ chất lượng PRD.
 
 [Evals](evaluation-guide.md) nằm ngoài runtime: cases/fixture là đầu vào; golden riêng tư phải có người review và khóa trước chấm. Runner hiện hỗ trợ xuất/chấm lượt live; replay provider frozen còn phải triển khai. Không dùng kết quả live làm bằng chứng hồi quy frozen.
 

@@ -55,6 +55,16 @@ Gửi đã duyệt từ ứng dụng dùng thread và headers của nguồn đã
 
 PDF được đọc trong process riêng: tối đa 10 MB/tệp, 20 trang và 20.000 ký tự/tệp, 20 giây, giới hạn CPU/bộ nhớ; tối đa năm tệp trong ngân sách 20 MB/email. Email trên 25 MB được báo quá lớn; email dài hơn 30.000 ký tự không bị cắt ngầm để tạo run. PDF có mật khẩu, không có lớp text, lỗi định dạng hoặc bị giới hạn được hiển thị rõ; chưa OCR hoặc đọc định dạng khác. Văn bản trích xuất vẫn là nguồn do bên gửi cung cấp, không phải dữ kiện công khai đã xác minh.
 
+## Chuẩn bị trước cuộc họp
+
+Bật `SCHEDULER_ENABLED` và `CALENDAR_AUTOMATION_ENABLED` sau khi kiểm kết nối Google. Lịch được quét mỗi 15 phút trong phạm vi bảy ngày; chỉ đề xuất chuẩn bị trong 24 giờ trước họp. Cuộc họp thêm muộn được xét ở lần quét tiếp theo. Mở **Email & cuộc họp**, chọn **Đồng bộ lịch** để đọc ngay, rồi mở đề xuất và xác nhận doanh nghiệp. Xác nhận danh tính vẫn là bước riêng trước nghiên cứu.
+
+Lịch là nguồn riêng, không được biến thành email gốc. Lịch thay đổi cần đồng bộ và xác nhận đề xuất hiện tại; lịch bị hủy, đã qua hoặc không còn trong phạm vi không được dùng để bắt đầu nghiên cứu. Quy tắc revision và chống trùng thuộc [CalendarAutomation](../apps/backend/src/email_agentic/domains/inbox/calendar.py) và [các kiểm tra Calendar](../apps/backend/tests/test_calendar_automation.py).
+
+**Duyệt nội dung** không cho phép gửi khi lựa chọn gửi đang tắt. Muốn gửi từ ứng dụng, bật gửi trong phần sửa, lưu phiên bản mới và chọn **Duyệt và gửi email** sau khi kiểm người nhận. **Lưu vào Gmail Drafts** chỉ tạo bản nháp trên Gmail. Nhãn nút và kết quả duyệt thuộc [trang review](../apps/web/src/features/research-detail.tsx).
+
+Lỗi tạm thời từ Firecrawl và DuckDuckGo được thử lại trong ngân sách hữu hạn; rate limit có thời gian nghỉ để tránh gọi dồn. Nguồn còn lại vẫn được giữ nếu provider lỗi. Cơ chế này không tăng quota hoặc bảo đảm provider luôn trả dữ liệu; chi tiết thuộc [bounded retry](../apps/backend/src/email_agentic/integrations/http.py) và [kiểm tra provider](../apps/backend/tests/test_provider_retry.py).
+
 ## Chạy local
 
 Cần Make, Docker Compose, uv và Node.js/npm. Xem build/runtime tại [web Dockerfile](../apps/web/Dockerfile), [backend Dockerfile](../apps/backend/Dockerfile), [backend manifest](../apps/backend/pyproject.toml) và [web manifest](../apps/web/package.json).
@@ -102,6 +112,6 @@ Hợp đồng HTTP do [OpenAPI/Pydantic](../apps/backend/src/email_agentic/api/r
 
 Request LLM dùng ngân sách cấu hình tại [LLM integration](../apps/backend/src/email_agentic/integrations/llm.py), thay vì bị timeout mặc định của HTTP client cắt ngắn. Khi cấu hình riêng có ngân sách quá thấp, có thể chạy local bằng `RESEARCH_TIMEOUT_SECONDS=180 make up`; override không được lưu vào file cấu hình. Lỗi mạng từ provider vẫn có thể xảy ra và không chứng minh model thiếu hỗ trợ schema.
 
-Chưa hoàn tất: tự kích hoạt nghiên cứu từ lịch, OCR cho PDF ảnh, xuất PDF/Word và attachment bất biến, UI đối chiếu Sent, cleanup/retention và trace xuyên tiến trình. Backup VPS đã có script/systemd timer; xem [vận hành VPS](vps-release-guide.md#backup-và-rollback). Scheduler và email automation mặc định tắt; chỉ bật khi đã chọn cutoff và kiểm quyền Google. Email phù hợp tạo đề xuất chờ xác nhận, còn dữ liệu lịch chưa tự trở thành nghiên cứu. Golden còn nháp và frozen replay chưa triển khai; xem [hướng dẫn eval](evaluation-guide.md).
+Chưa hoàn tất: OCR cho PDF ảnh, xuất PDF/Word và attachment bất biến, UI đối chiếu Sent, cleanup/retention và trace xuyên tiến trình. Backup VPS đã có script/systemd timer; xem [vận hành VPS](vps-release-guide.md#backup-và-rollback). Scheduler và các automation mặc định tắt; email automation cần cutoff, Calendar cần quyền đọc lịch. Các đề xuất đều chờ xác nhận doanh nghiệp. Golden còn nháp và frozen replay chưa triển khai; xem [hướng dẫn eval](evaluation-guide.md).
 
 Tài liệu sản phẩm/kiến trúc được theo dõi trong Git. Checklist vận hành riêng và danh mục đường dẫn tài liệu gốc trên máy, cấu hình thật, golden và kết quả thử được giữ ngoài Git theo [.gitignore](../.gitignore).
