@@ -134,7 +134,13 @@ async def run_detail(run_id: UUID, request: Request, actor: Actor = Depends(auth
             "SELECT model,input_tokens,output_tokens,cost FROM model_usage WHERE run_id=%s", (run_id,)
         ),
         "gmail_drafts": await c.db.all(
-            "SELECT id,report_id,status,provider_id,thread_id,error_code FROM gmail_drafts WHERE run_id=%s ORDER BY created_at DESC",
+            """SELECT d.id,d.report_id,d.status,d.provider_id,d.thread_id,d.error_code,
+            (r.email_subject=latest.email_subject AND r.email_body=latest.email_body
+             AND r.recipients=latest.recipients) AS matches_current
+            FROM gmail_drafts d JOIN reports r ON r.id=d.report_id
+            JOIN reports latest ON latest.run_id=d.run_id
+             AND latest.version=(SELECT max(version) FROM reports WHERE run_id=d.run_id)
+            WHERE d.run_id=%s ORDER BY d.created_at DESC""",
             (run_id,),
         ),
         "gmail_drafts_available": c.google.drafts_available,

@@ -144,13 +144,15 @@ async def build_container(settings):
                     await publication.save_kb(report)
                     return {"status": "succeeded"}
                 response = await google.send(report)
-                if not isinstance(response.get("id"), str) or not response["id"]:
+                if (not isinstance(response.get("id"), str) or not response["id"]
+                    or (report.get("source_message")
+                        and response.get("threadId") != report["source_message"]["thread_id"])):
                     raise ProviderFailure("gmail", ambiguous=True, category="invalid_receipt")
                 await publication.complete(request.action_id, "succeeded", response["id"])
                 return {"status": "succeeded"}
             except ProviderFailure as exc:
                 await publication.complete(
-                    request.action_id, "unknown" if exc.ambiguous else "failed", error=exc.provider
+                    request.action_id, "unknown" if exc.ambiguous else "failed", error=f"{exc.provider}:{exc.category}"
                 )
                 raise
 

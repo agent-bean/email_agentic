@@ -84,6 +84,7 @@ Email, web và PDF là **dữ liệu, không phải lệnh cấp quyền**. Tác
 | Quét hoặc worker dừng | Chỉ cập nhật mốc quét sau khi đã lưu đầu vào/tác vụ. Có đọc bù; worker giữ việc có thời hạn và gia hạn, tiếp tục từ checkpoint với cùng ID. |
 | Node chạy lại | Không đặt gửi email vào đoạn có thể chạy lại vô điều kiện khi resume. Không hứa chỉ gửi đúng một lần nhờ DB và Gmail tự phối hợp. |
 | Gửi không rõ kết quả | Đánh dấu `unknown`, đối chiếu Sent và thông tin tương quan. Không tìm thấy ngay chưa chứng minh chưa gửi; chưa rõ thì hiện trên web, không gửi lại mù. |
+| Gmail Draft đã xuất | Tìm draft cùng run khớp subject/body/To/Cc/Bcc kể cả ở phiên bản trước; liên kết bền vững action→draft, một draft chỉ thuộc một action. Kiểm nội dung/thread trên Gmail trước khi `drafts.send` với MIME đã duyệt. Draft mất/đổi thì dừng, không fallback `messages.send`. Gửi thành công ghi draft `sent`; không xuất thêm cùng email đã/đang gửi hoặc `unknown`. Chưa xuất draft phù hợp thì giữ gửi trực tiếp. |
 | Gmail trả xác nhận gửi | Lưu provider ID/kết quả. Chỉ chứng minh dịch vụ nhận lệnh gửi, chưa chứng minh đến inbox hoặc được đọc. |
 | Email xong, KB lỗi | Chỉ xử lý lại KB. Ghi KB cùng phiên bản/gói lặp lại không tạo bản trùng. Thông báo nhạy cảm áp dụng cùng quy tắc duyệt. |
 

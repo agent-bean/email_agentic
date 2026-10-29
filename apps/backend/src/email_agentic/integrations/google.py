@@ -2,7 +2,10 @@ import asyncio
 import base64
 import json
 from datetime import datetime, UTC
+from email import policy
 from email.message import EmailMessage
+from email.parser import BytesParser
+from email.utils import getaddresses
 from email_agentic.integrations.email_message import decode_message
 from threading import Lock
 
@@ -120,7 +123,40 @@ class Google:
         raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
         return {"raw": raw, **({"threadId": source["thread_id"]} if source else {})}
 
+    def draft_matches(self, report, draft):
+        try:
+            message = BytesParser(policy=policy.default).parsebytes(
+                base64.urlsafe_b64decode(draft["message"]["raw"] + "==="))
+            if message.is_multipart() or message.get_content_type() != "text/plain":
+                return False
+            def addresses(header):
+                return sorted(a for _, a in getaddresses(message.get_all(header, [])))
+            def normalize(text):
+                return text.replace("\r\n", "\n").rstrip("\n")
+            source = report.get("source_message") or {}
+            return (
+                draft["message"].get("threadId") == source.get("thread_id")
+                and str(message.get("Subject", "")) == report["email_subject"]
+                and str(message.get("In-Reply-To", "")) == source.get("headers", {}).get("Message-ID", "")
+                and addresses("From") == [self.settings.owner_email]
+                and not message.get("Reply-To")
+                and all(addresses(header) == sorted(report["recipients"].get(key, []))
+                        for header, key in (("To", "to"), ("Cc", "cc"), ("Bcc", "bcc")))
+                and normalize(message.get_content()) == normalize(report["email_body"])
+            )
+        except (KeyError, ValueError, TypeError, LookupError):
+            return False
+
     async def send(self, report):
+        draft_id = report.get("gmail_draft_provider_id")
+        if draft_id:
+            draft = await self.call("gmail", "GET", f"gmail/v1/users/me/drafts/{draft_id}",
+                                    params={"format": "raw"})
+            if not self.draft_matches(report, draft):
+                raise ProviderFailure("gmail", category="draft_changed")
+            # Supply the approved MIME in the send itself: a concurrent Gmail edit cannot alter recipients/body.
+            return await self.call("gmail", "POST", "gmail/v1/users/me/drafts/send",
+                                   json={"id": draft_id, "message": self.outgoing(report)})
         return await self.call("gmail", "POST", "gmail/v1/users/me/messages/send", json=self.outgoing(report))
 
     async def create_draft(self, report):
