@@ -10,7 +10,7 @@ Xem [kiến trúc](system-architecture.md) để hiểu hệ thống và checkli
 | --- | --- |
 | Doanh nghiệp | ID nội bộ, tên pháp nhân, domain chính thức và bằng chứng đối chiếu. Không tự gộp theo tên/email cá nhân hoặc gộp công ty mẹ/con. |
 | Email/cuộc họp | ID nguồn, phiên bản, attachment và thông tin nguồn gốc nội bộ. Bản sao trong ứng dụng không cho phép tự xóa nguồn Google. |
-| Email nguồn của nghiên cứu | `source_email` là text do người dùng cung cấp, lưu nguyên trạng, tách khỏi `context` (yêu cầu nghiên cứu) và email nháp. Không lọc nhãn/đổi nội dung khi hiển thị. Run cũ không có nguồn riêng giữ null; không suy diễn từ context hoặc domain. Chưa liên kết tự động với Gmail. Chỉ trả nội dung email trong chi tiết run của đúng owner, không đưa vào danh sách tổng quan. |
+| Email nguồn của nghiên cứu | `source_email` là text do người dùng cung cấp, lưu nguyên trạng, tách khỏi `context` (yêu cầu nghiên cứu) và email nháp. Không lọc nhãn/đổi nội dung khi hiển thị. Run cũ không có nguồn riêng giữ null; không suy diễn từ context hoặc domain. Khi chọn Gmail input, backend kiểm owner và lưu source_input_id cùng snapshot source_message (headers/thread/attachment). Client không thay thế snapshot bằng nội dung tự khai; một input có một run. Chỉ trả nội dung email trong chi tiết run của đúng owner, không đưa vào danh sách tổng quan. |
 | Tác vụ | Ai yêu cầu, lý do, đầu vào, doanh nghiệp, thời điểm nhận, ngưỡng đánh giá thời gian đã chọn (mặc định 42 giây), hạn dừng xử lý và kết quả từng nhánh. Retry thuộc cùng tác vụ. |
 | Bằng chứng và dữ kiện | Nội dung, nguồn, URL/ID tài liệu, trang/đoạn, thời điểm thu thập, ngày xuất bản nếu xác minh được. Phân biệt fact, suy luận và chưa xác minh; giữ nguồn mâu thuẫn và thông tin nguồn gốc nội bộ. |
 | Phiên bản báo cáo | Markdown, nguồn trích, người sửa, thời điểm, nháp/chính thức. Không sửa đè bản đã đưa ra duyệt. |
@@ -24,7 +24,7 @@ Không lưu secret vào dữ liệu nghiệp vụ, prompt hoặc checkpoint. Gi�
 
 ## Phê duyệt có nghĩa gì?
 
-**Người dùng duyệt cả nội dung, người nhận và tùy chọn gửi/lưu, không chỉ báo cáo.** Backend kiểm đúng người, phiên bản, thời hạn và lựa chọn trước khi thực thi. UI tách Báo cáo và Email nháp; email hiện được lưu trong ứng dụng, chưa tạo draft trên Gmail. Khi bật gửi email, phê duyệt cho phép gửi nội dung đó tới người nhận đã chọn.
+**Người dùng duyệt cả nội dung, người nhận và tùy chọn gửi/lưu, không chỉ báo cáo.** Backend kiểm đúng người, phiên bản, thời hạn và lựa chọn trước khi thực thi. UI tách Báo cáo và Email nháp; email được lưu theo phiên bản trong ứng dụng và có thể xuất sang Gmail Drafts theo yêu cầu riêng. Tạo draft không cấp quyền gửi hoặc duyệt; draft phiên bản cũ không tự bị ghi đè/xóa. Khi bật gửi email, phê duyệt cho phép gửi nội dung đó tới người nhận đã chọn.
 
 1. Nháp và tệp xem trước có nhãn chưa duyệt. Người dùng xem được đúng nội dung và attachment sẽ phát hành.
 2. Mỗi đề nghị giữ một bản cố định. Hai tab sửa/duyệt cùng lúc phải kiểm phiên bản và cập nhật trong giao dịch DB; bản cũ không ghi đè bản mới.
