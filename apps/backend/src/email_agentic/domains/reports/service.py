@@ -1,4 +1,6 @@
 import uuid
+from typing import Literal
+from email_agentic.domains.reports.files import ReportFiles
 from email.utils import parseaddr
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from psycopg.types.json import Jsonb
@@ -31,11 +33,13 @@ class ReportEdit(BaseModel):
     recipients: Recipients = Field(default_factory=Recipients)
     send_email: bool = False
     save_kb: bool = False
+    attachment_formats: list[Literal["pdf", "docx", "md"]] = Field(default_factory=list, max_length=3)
 
 
 class Reports:
     def __init__(self, db, knowledge):
         self.db, self.knowledge = db, knowledge
+        self.files = ReportFiles(db)
 
     async def latest(self, owner, run_id):
         row = await self.db.one(
@@ -46,7 +50,21 @@ class Reports:
             raise NotFound()
         return row
 
-    async def insert(self, connection, run, version, markdown, subject, body, recipients, send, kb, quality):
+    async def insert(
+        self,
+        connection,
+        run,
+        version,
+        markdown,
+        subject,
+        body,
+        recipients,
+        send,
+        kb,
+        quality,
+        formats=(),
+        previous=None,
+    ):
         report = {"id": uuid.uuid4(), "owner": run["owner"], "run_id": run["id"], "markdown": markdown}
         await connection.execute(
             """INSERT INTO reports(id,run_id,owner,version,markdown,email_subject,email_body,
@@ -65,6 +83,21 @@ class Reports:
                 Jsonb(quality),
             ),
         )
+        artifacts = []
+        reusable = (
+            {item["format"]: item for item in previous["artifacts"]}
+            if previous and previous["markdown"] == markdown
+            else {}
+        )
+        for format in dict.fromkeys(formats):
+            artifacts.append(
+                reusable.get(format)
+                or await self.files.create(connection, {**report, "version": version}, format)
+            )
+        if artifacts:
+            await connection.execute(
+                "UPDATE reports SET artifacts=%s WHERE id=%s", (Jsonb(artifacts), report["id"])
+            )
         await connection.execute(
             "INSERT INTO approvals(id,report_id,owner) VALUES(%s,%s,%s)",
             (uuid.uuid4(), report["id"], run["owner"]),
@@ -106,8 +139,10 @@ class Reports:
                     "SELECT * FROM research_runs WHERE id=%s AND owner=%s FOR UPDATE", (run_id, owner)
                 )
             ).fetchone()
-            if not run:
+            if not run or run.get("history_purged_at"):
                 raise NotFound()
+            if run.get("raw_purged_at"):
+                raise Conflict("Source data expired; this report is read-only")
             old = await (
                 await connection.execute(
                     "SELECT * FROM reports WHERE run_id=%s ORDER BY version DESC LIMIT 1", (run_id,)
@@ -140,4 +175,6 @@ class Reports:
                 request.send_email,
                 request.save_kb,
                 quality,
+                request.attachment_formats,
+                old,
             )

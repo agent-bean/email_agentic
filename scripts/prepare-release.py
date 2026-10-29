@@ -14,6 +14,7 @@ INPUTS = (
     "apps/web",
     "infra",
     "scripts/backup-production.sh",
+    "scripts/retention-production.sh",
     ".dockerignore",
 )
 

@@ -15,9 +15,9 @@ class GmailDrafts:
             """SELECT p.id FROM publication_actions p JOIN approvals a ON a.id=p.approval_id
             JOIN reports r ON r.id=a.report_id WHERE r.run_id=%s AND p.kind='email'
             AND p.status IN ('pending','running','unknown','succeeded') AND r.email_subject=%s
-            AND r.email_body=%s AND r.recipients=%s::jsonb LIMIT 1""",
+            AND r.email_body=%s AND r.recipients=%s::jsonb AND r.artifacts=%s::jsonb LIMIT 1""",
             (report["run_id"], report["email_subject"], report["email_body"],
-             Jsonb(report["recipients"])),
+             Jsonb(report["recipients"]), Jsonb(report.get("artifacts", []))),
         )).fetchone()
 
     async def request(self, owner, run_id, version):
@@ -58,9 +58,9 @@ class GmailDrafts:
             matching = await (await connection.execute(
                 """SELECT d.id,d.status FROM gmail_drafts d JOIN reports r ON r.id=d.report_id
                 WHERE d.run_id=%s AND d.owner=%s AND r.email_subject=%s AND r.email_body=%s
-                AND r.recipients=%s::jsonb AND d.status IN ('succeeded','pending','running','unknown')
+                AND r.recipients=%s::jsonb AND r.artifacts=%s::jsonb AND d.status IN ('succeeded','pending','running','unknown')
                 ORDER BY r.version DESC LIMIT 1""",
-                (run_id, owner, report["email_subject"], report["email_body"], Jsonb(report["recipients"])),
+                (run_id, owner, report["email_subject"], report["email_body"], Jsonb(report["recipients"]), Jsonb(report.get("artifacts", []))),
             )).fetchone()
             if matching:
                 if matching["status"] == "succeeded":
@@ -82,7 +82,7 @@ class GmailDrafts:
     async def package(self, owner, draft_id):
         async with self.db.transaction() as connection:
             row = await (await connection.execute(
-                """SELECT d.*,r.email_subject,r.email_body,r.recipients,r.version,runs.source_message
+                """SELECT d.*,r.email_subject,r.email_body,r.recipients,r.artifacts,r.version,runs.source_message
                 FROM gmail_drafts d JOIN reports r ON r.id=d.report_id
                 JOIN research_runs runs ON runs.id=d.run_id WHERE d.id=%s AND d.owner=%s""",
                 (draft_id, owner),
@@ -108,6 +108,8 @@ class GmailDrafts:
                 return None
             await connection.execute("UPDATE gmail_drafts SET status='running',updated_at=now() WHERE id=%s",
                                      (draft_id,))
+            from email_agentic.domains.reports.files import ReportFiles
+            row['attachments'] = await ReportFiles(self.db).selected(connection, {**row, 'id': row['report_id']})
             return row
 
     async def complete(self, draft_id, status, provider_id=None, thread_id=None, error=None):

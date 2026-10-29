@@ -184,6 +184,13 @@ class Google:
             message["In-Reply-To"] = headers["Message-ID"]
             message["References"] = " ".join(filter(None, [headers.get("References"), headers["Message-ID"]]))
         message.set_content(report["email_body"])
+        for attachment in report.get('attachments', []):
+            import hashlib
+            if hashlib.sha256(attachment['data']).hexdigest() != attachment['sha256']:
+                raise ProviderFailure('gmail', category='attachment_changed')
+            maintype, subtype = attachment['mime_type'].split(';')[0].split('/', 1)
+            message.add_attachment(attachment['data'], maintype=maintype, subtype=subtype,
+                                   filename=attachment['filename'])
         raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
         return {"raw": raw, **({"threadId": source["thread_id"]} if source else {})}
 
@@ -191,7 +198,21 @@ class Google:
         try:
             message = BytesParser(policy=policy.default).parsebytes(
                 base64.urlsafe_b64decode(draft["message"]["raw"] + "==="))
-            if message.is_multipart() or message.get_content_type() != "text/plain":
+            parts = list(message.iter_attachments()) if message.is_multipart() else []
+            body = message.get_body(preferencelist=('plain',)) if message.is_multipart() else message
+            if not body or body.get_content_type() != 'text/plain':
+                return False
+            import hashlib
+            expected = report.get('attachments', [])
+            if len(parts) != len(expected):
+                return False
+            for part, attachment in zip(parts, expected):
+                if (part.get_filename() != attachment['filename'] or
+                    part.get_content_type() != attachment['mime_type'].split(';')[0] or
+                    hashlib.sha256(part.get_payload(decode=True) or b'').hexdigest() != attachment['sha256']):
+                    return False
+            # Any extra HTML/related part is a change to the approved plain-text email.
+            if message.is_multipart() and len(list(message.walk())) != 2 + len(expected):
                 return False
             def addresses(header):
                 return sorted(a for _, a in getaddresses(message.get_all(header, [])))
@@ -206,7 +227,7 @@ class Google:
                 and not message.get("Reply-To")
                 and all(addresses(header) == sorted(report["recipients"].get(key, []))
                         for header, key in (("To", "to"), ("Cc", "cc"), ("Bcc", "bcc")))
-                and normalize(message.get_content()) == normalize(report["email_body"])
+                and normalize(body.get_content()) == normalize(report["email_body"])
             )
         except (KeyError, ValueError, TypeError, LookupError):
             return False

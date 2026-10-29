@@ -86,7 +86,7 @@ Email, web và PDF là **dữ liệu, không phải lệnh cấp quyền**. Tác
 | Quét hoặc worker dừng | Chỉ cập nhật mốc quét sau khi đã lưu đầu vào/tác vụ. Có đọc bù; worker giữ việc có thời hạn và gia hạn, tiếp tục từ checkpoint với cùng ID. |
 | Node chạy lại | Không đặt gửi email vào đoạn có thể chạy lại vô điều kiện khi resume. Không hứa chỉ gửi đúng một lần nhờ DB và Gmail tự phối hợp. |
 | Gửi không rõ kết quả | Đánh dấu `unknown`, đối chiếu Sent và thông tin tương quan. Không tìm thấy ngay chưa chứng minh chưa gửi; chưa rõ thì hiện trên web, không gửi lại mù. |
-| Gmail Draft đã xuất | Tìm draft cùng run khớp subject/body/To/Cc/Bcc kể cả ở phiên bản trước; liên kết bền vững action→draft, một draft chỉ thuộc một action. Kiểm nội dung/thread trên Gmail trước khi `drafts.send` với MIME đã duyệt. Draft mất/đổi thì dừng, không fallback `messages.send`. Gửi thành công ghi draft `sent`; không xuất thêm cùng email đã/đang gửi hoặc `unknown`. Chưa xuất draft phù hợp thì giữ gửi trực tiếp. |
+| Gmail Draft đã xuất | Tìm draft cùng run khớp subject/body/To/Cc/Bcc và toàn bộ attachment kể cả ở phiên bản trước; liên kết bền vững action→draft, một draft chỉ thuộc một action. Kiểm nội dung/thread, tên/MIME/checksum attachment trên Gmail trước khi `drafts.send` với MIME đã duyệt. Draft mất/đổi thì dừng, không fallback `messages.send`. Gửi thành công ghi draft `sent`; không xuất thêm cùng email đã/đang gửi hoặc `unknown`. Chưa xuất draft phù hợp thì giữ gửi trực tiếp. |
 | Gmail trả xác nhận gửi | Lưu provider ID/kết quả. Chỉ chứng minh dịch vụ nhận lệnh gửi, chưa chứng minh đến inbox hoặc được đọc. |
 | Email xong, KB lỗi | Chỉ xử lý lại KB. Ghi KB cùng phiên bản/gói lặp lại không tạo bản trùng. Thông báo nhạy cảm áp dụng cùng quy tắc duyệt. |
 
@@ -114,3 +114,10 @@ Kiểm thử tập trung vào chống trùng, duyệt/sửa đồng thời, sai 
 ### Nguồn Calendar
 
 Meeting là nguồn riêng với email; API không nhận đồng thời hai nguồn cho một run. Snapshot lịch giữ nguyên dữ liệu Google. Đề xuất phải gắn calendar, event instance và revision liên quan nghiệp vụ; metadata như etag không làm tạo nghiên cứu mới. Lịch thay đổi, bị hủy hoặc không còn sắp tới phải được đồng bộ và kiểm lại trước xác nhận và nghiên cứu. Hợp đồng thực thi nằm tại [ResearchRequest/ResearchService](../apps/backend/src/email_agentic/domains/research/service.py), [Approvals](../apps/backend/src/email_agentic/domains/approvals/service.py) và [kiểm tra Calendar](../apps/backend/tests/test_calendar_automation.py).
+
+
+### Report files và retention
+
+[ReportFiles](../apps/backend/src/email_agentic/domains/reports/files.py) sở hữu bytes/checksum và quyền tải; [renderer](../apps/backend/src/email_agentic/integrations/report_export.py) chạy tách process với giới hạn tài nguyên, không tải ảnh hoặc resource web/file. Export không bật gửi hay thay lựa chọn attachment. Chỉ định dạng được chọn khi sửa mới thuộc phiên bản cần duyệt. File có thể được dùng lại giữa các phiên bản cùng run khi Markdown không đổi; kiểm owner, run, nội dung gốc, descriptor và checksum trước duyệt/xuất draft/gửi. Đổi nội dung report không được dùng file cũ.
+
+[Retention](../apps/backend/src/email_agentic/platform/retention.py) là nguồn chuẩn của các điều kiện bảo vệ và cleanup. Payload nguồn/checkpoint/evidence hết hạn sau 30 ngày; report/file và KB draft sau 90 ngày; KB đã duyệt giữ nguyên. Giữ tombstone và receipt để tránh nhập/gửi lại. Nguồn hết hạn không được khôi phục bằng Gmail sync hoặc chỉnh/sử dụng lại report; lịch còn khả dụng được giữ. Audit 30 ngày; log container xoay vòng, Prometheus/Tempo có retention riêng trong infra. Lịch vận hành chỉ apply sau backup thành công.

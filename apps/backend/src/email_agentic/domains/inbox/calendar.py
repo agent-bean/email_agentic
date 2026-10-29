@@ -32,7 +32,7 @@ class CalendarAutomation:
                     (source_id, owner, event['id'], owner, source_id))
                 source = await (await conn.execute('''INSERT INTO inputs(id,owner,provider,source_id,kind,content,calendar_available)
                     VALUES(%s,%s,'google',%s,'meeting',%s,true) ON CONFLICT(owner,provider,source_id,kind)
-                    DO UPDATE SET content=excluded.content,calendar_available=true RETURNING id''',
+                    DO UPDATE SET content=excluded.content,calendar_available=true,purged_at=NULL RETURNING id''',
                     (uuid.uuid4(), owner, source_id, Jsonb(event)))).fetchone()
                 if not self.settings.calendar_automation_enabled or not eligible(event, owner, now, self.settings.app_timezone):
                     continue

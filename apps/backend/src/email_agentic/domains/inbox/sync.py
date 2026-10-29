@@ -18,7 +18,7 @@ class GmailSync:
         old = row['cursor'] if row else None
         cursor = json.loads(old) if old else None
         known = {row['source_id'] for row in await self.db.all('''SELECT source_id FROM inputs
-            WHERE owner=%s AND provider='google' AND kind='email' AND content->>'status'='succeeded' ''', (owner,))}
+            WHERE owner=%s AND provider='google' AND kind='email' AND (content->>'status'='succeeded' OR purged_at IS NOT NULL) ''', (owner,))}
         retry_ids = [row['source_id'] for row in await self.db.all('''SELECT source_id FROM inputs
             WHERE owner=%s AND provider='google' AND kind='email' AND content->>'status'='read_failed'
             ORDER BY created_at LIMIT 50''', (owner,))] if retry_failed else []
@@ -34,10 +34,10 @@ class GmailSync:
             for message in messages:
                 source = await (await connection.execute('''INSERT INTO inputs(id,owner,provider,source_id,kind,content)
                     VALUES(%s,%s,'google',%s,'email',%s) ON CONFLICT(owner,provider,source_id,kind)
-                    DO UPDATE SET content=excluded.content RETURNING id''',
+                    DO UPDATE SET content=excluded.content WHERE inputs.purged_at IS NULL RETURNING id''',
                     (uuid.uuid4(), owner, message['id'], Jsonb(message)),
                 )).fetchone()
-                if self.settings.email_automation_enabled and eligible(message, owner, self.settings.email_automation_start_at):
+                if source and self.settings.email_automation_enabled and eligible(message, owner, self.settings.email_automation_start_at):
                     await queue_intake(connection, owner, source['id'])
             await connection.execute('''INSERT INTO sync_cursors VALUES(%s,'gmail',%s)
                 ON CONFLICT(owner,provider) DO UPDATE SET cursor=excluded.cursor''', (owner, encoded))

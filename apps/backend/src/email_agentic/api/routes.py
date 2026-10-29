@@ -1,6 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
+from fastapi.responses import Response
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -26,6 +27,8 @@ class RunSummary(BaseModel):
 
 
 class RunRecord(RunSummary):
+    raw_purged_at: datetime | None = None
+    history_purged_at: datetime | None = None
     source_email: str | None = None
     source_input_id: UUID | None = None
     source_message: dict | None = None
@@ -152,7 +155,7 @@ async def run_detail(run_id: UUID, request: Request, actor: Actor = Depends(auth
         "gmail_drafts": await c.db.all(
             """SELECT d.id,d.report_id,d.status,d.provider_id,d.thread_id,d.error_code,
             (r.email_subject=latest.email_subject AND r.email_body=latest.email_body
-             AND r.recipients=latest.recipients) AS matches_current
+             AND r.recipients=latest.recipients AND r.artifacts=latest.artifacts) AS matches_current
             FROM gmail_drafts d JOIN reports r ON r.id=d.report_id
             JOIN reports latest ON latest.run_id=d.run_id
              AND latest.version=(SELECT max(version) FROM reports WHERE run_id=d.run_id)
@@ -275,3 +278,16 @@ async def sync(
             connection, actor.owner, kind, None, f"manual-sync:{actor.owner}:{provider}:{idempotency_key}"
         )
     return {"status": "queued"}
+
+
+@router.post("/runs/{run_id}/reports/{report_id}/exports/{format}", status_code=201)
+async def export_report(run_id: UUID, report_id: UUID, format: str, request: Request, actor: Actor = Depends(authenticate)):
+    return await request.app.state.container.reports.files.export(actor.owner, run_id, report_id, format)
+
+
+@router.get("/files/{file_id}")
+async def download_file(file_id: UUID, request: Request, inline: bool = False, actor: Actor = Depends(authenticate)):
+    row = await request.app.state.container.reports.files.get(actor.owner, file_id)
+    return Response(content=bytes(row['data']), media_type=row['mime_type'], headers={
+        'Content-Disposition': f'{"inline" if inline and row["format"] == "pdf" else "attachment"}; filename="{row["filename"]}"', 'Cache-Control': 'private, no-store',
+        'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "sandbox; default-src 'none'"})

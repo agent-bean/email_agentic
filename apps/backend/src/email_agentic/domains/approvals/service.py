@@ -18,7 +18,7 @@ class Approvals:
             ).fetchone()
             if not run:
                 raise NotFound()
-            if run["status"] != "awaiting_identity" or run["version"] != version:
+            if run.get("raw_purged_at") or run["status"] != "awaiting_identity" or run["version"] != version:
                 raise Conflict("Identity request changed")
             if run.get('source_meeting_id'):
                 source = await (await connection.execute(
@@ -59,7 +59,7 @@ class Approvals:
             )
             row = await (
                 await connection.execute(
-                    """SELECT a.*, r.send_email,r.save_kb,r.run_id FROM approvals a
+                    """SELECT a.*, r.send_email,r.save_kb,r.run_id,r.artifacts,r.id AS selected_report_id FROM approvals a
                 JOIN reports r ON r.id=a.report_id WHERE a.id=%s AND a.owner=%s FOR UPDATE OF a""",
                     (approval_id, owner),
                 )
@@ -83,6 +83,9 @@ class Approvals:
                 ("approved" if approve else "rejected", approval_id),
             )
             if approve:
+                from email_agentic.domains.reports.files import ReportFiles
+                await ReportFiles(self.db).selected(connection, {'id': row['selected_report_id'],
+                    'owner': owner, 'artifacts': row['artifacts']})
                 for kind, enabled in [("email", row["send_email"]), ("kb", row["save_kb"])]:
                     if enabled:
                         action_id = uuid.uuid4()

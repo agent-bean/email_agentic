@@ -89,7 +89,7 @@ Briefing có các phần cốt lõi theo đề: giới thiệu doanh nghiệp, w
 
 ### Báo cáo trên web và nội dung email
 
-Chủ sản phẩm đã chốt cách tách nội dung: báo cáo trên web có các phần thông tin, nguồn và điểm thiếu/mâu thuẫn; body email là bản tóm tắt ngắn về doanh nghiệp, cuộc họp và điểm cần lưu ý. Cảnh báo ảnh hưởng đến việc chuẩn bị họp phải có trong email. Chỉ số kiểm tra chất lượng như số nguồn hiển thị trên web, không bắt buộc đưa vào body email; không vì vậy mà bỏ cảnh báo nghiệp vụ hoặc thay đổi tiêu chí nghiệm thu.
+Chủ sản phẩm đã cập nhật cách tách nội dung: report trên web dùng nội bộ, gồm thông tin, nguồn và điểm thiếu/mâu thuẫn. Body email viết cho khách/đối tác: reply khi có email gốc, hoặc email mở đầu tùy ngữ cảnh. Không đưa phân tích nội bộ, chỉ số kiểm tra chất lượng hoặc thông tin riêng vào body gửi khách; không bịa năng lực hoặc cam kết của người gửi. Cảnh báo phục vụ chuẩn bị họp nằm trên web.
 
 Người dùng có thể chọn đính kèm báo cáo đầy đủ, ví dụ PDF, và phải xem/duyệt cả body email lẫn tệp trước khi gửi. Cách trình bày này không bỏ yêu cầu hỗ trợ PDF, Word, Markdown và Email tại FR-15.
 

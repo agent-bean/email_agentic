@@ -1,0 +1,15 @@
+[Unit]
+Description=Email Assistant retention after a verified backup
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/email-agentic/current
+ExecStart=/bin/bash /opt/email-agentic/current/scripts/retention-production.sh
+UMask=0077
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

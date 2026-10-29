@@ -61,9 +61,9 @@ class Publication:
                     draft = await (await connection.execute(
                         """SELECT d.* FROM gmail_drafts d JOIN reports r ON r.id=d.report_id
                         WHERE d.run_id=%s AND d.owner=%s AND r.email_subject=%s AND r.email_body=%s
-                        AND r.recipients=%s::jsonb ORDER BY r.version DESC LIMIT 1 FOR UPDATE OF d""",
+                        AND r.recipients=%s::jsonb AND r.artifacts=%s::jsonb ORDER BY r.version DESC LIMIT 1 FOR UPDATE OF d""",
                         (row["run_id"], owner, row["email_subject"], row["email_body"],
-                         Jsonb(row["recipients"])),
+                         Jsonb(row["recipients"]), Jsonb(row.get("artifacts", []))),
                     )).fetchone()
                 if draft:
                     used = await (await connection.execute(
@@ -82,6 +82,8 @@ class Publication:
             await connection.execute(
                 "UPDATE publication_actions SET status='running',started_at=now() WHERE id=%s", (action_id,)
             )
+            from email_agentic.domains.reports.files import ReportFiles
+            row['attachments'] = await ReportFiles(self.db).selected(connection, row)
             return row
 
     async def complete(self, action_id, status, provider_id=None, error=None):
