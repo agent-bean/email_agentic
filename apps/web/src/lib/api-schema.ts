@@ -124,6 +124,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/inputs/{input_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Input Detail */
+        get: operations["input_detail_api_v1_inputs__input_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/gmail-draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Gmail Draft */
+        post: operations["gmail_draft_api_v1_runs__run_id__gmail_draft_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/knowledge": {
         parameters: {
             query?: never;
@@ -336,6 +370,8 @@ export interface components {
             context: string;
             /** Source Email */
             source_email?: string | null;
+            /** Source Input Id */
+            source_input_id?: string | null;
         };
         /** RunDetail */
         RunDetail: {
@@ -358,6 +394,12 @@ export interface components {
             usage: {
                 [key: string]: unknown;
             }[];
+            /** Gmail Drafts */
+            gmail_drafts: {
+                [key: string]: unknown;
+            }[];
+            /** Gmail Drafts Available */
+            gmail_drafts_available: boolean;
         };
         /** RunRecord */
         RunRecord: {
@@ -391,6 +433,12 @@ export interface components {
             };
             /** Source Email */
             source_email?: string | null;
+            /** Source Input Id */
+            source_input_id?: string | null;
+            /** Source Message */
+            source_message?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** RunSummary */
         RunSummary: {
@@ -672,6 +720,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    input_detail_api_v1_inputs__input_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                input_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    gmail_draft_api_v1_runs__run_id__gmail_draft_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IdentityDecision"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Created"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

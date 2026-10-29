@@ -1,6 +1,9 @@
 import asyncio
 import base64
+import json
+from datetime import datetime, UTC
 from email.message import EmailMessage
+from email_agentic.integrations.email_message import decode_message
 from threading import Lock
 
 from google.auth.transport.requests import Request
@@ -15,6 +18,15 @@ class Google:
         self.client, self.settings = client, settings
         self.lock = Lock()
         self.credentials = None
+
+    @property
+    def drafts_available(self):
+        try:
+            scopes = set(json.loads(self.settings.google_token_path.read_text()).get("scopes", []))
+            return bool(scopes & {"https://www.googleapis.com/auth/gmail.compose",
+                                  "https://www.googleapis.com/auth/gmail.modify", "https://mail.google.com/"})
+        except (OSError, ValueError, TypeError):
+            return False
 
     def token(self):
         with self.lock:
@@ -65,34 +77,65 @@ class Google:
             if not page:
                 return events
 
-    async def inbox(self):
+    async def inbox(self, known=()):
         messages = []
-        page = None
-        while True:
-            params = {"labelIds": "INBOX", "maxResults": 100}
-            if page:
-                params["pageToken"] = page
-            result = await self.call("gmail", "GET", "gmail/v1/users/me/messages", params=params)
-            for item in result.get("messages", []):
-                messages.append(
-                    await self.call(
-                        "gmail", "GET", f"gmail/v1/users/me/messages/{item['id']}", params={"format": "full"}
-                    )
+        # A bounded recent window avoids an unbounded full-mailbox scan on every click.
+        result = await self.call("gmail", "GET", "gmail/v1/users/me/messages",
+                                 params={"labelIds": "INBOX", "maxResults": 50})
+        for item in result.get("messages", []):
+            if item["id"] in known:
+                continue
+            try:
+                result_message = await self.call(
+                    "gmail", "GET", f"gmail/v1/users/me/messages/{item['id']}", params={"format": "raw"}
                 )
-            page = result.get("nextPageToken")
-            if not page:
-                return messages
+                if result_message.get("sizeEstimate", 0) > 25 * 1024 * 1024:
+                    messages.append({"id": item["id"], "status": "too_large"})
+                    continue
+                raw = base64.urlsafe_b64decode(result_message["raw"] + "===")
+                messages.append({**await decode_message(raw, item["id"], result_message["threadId"]),
+                                 "mailbox": self.settings.owner_email,
+                                 "received_at": datetime.fromtimestamp(int(result_message.get("internalDate", "0")) / 1000, UTC).isoformat()})
+            except ProviderFailure as exc:
+                messages.append({"id": item["id"], "status": "read_failed",
+                                 "error_code": f"{exc.provider}:{exc.category}"})
+                if exc.transient:
+                    break
+        return messages
 
-    async def send(self, report):
+    def outgoing(self, report):
         message = EmailMessage()
+        message["From"] = self.settings.owner_email
         for header, key in [("To", "to"), ("Cc", "cc"), ("Bcc", "bcc")]:
             if report["recipients"].get(key):
                 message[header] = ",".join(report["recipients"][key])
         message["Subject"] = report["email_subject"]
         message["Message-ID"] = report["correlation_id"]
+        source = report.get("source_message") or {}
+        if source:
+            headers = source["headers"]
+            message["In-Reply-To"] = headers["Message-ID"]
+            message["References"] = " ".join(filter(None, [headers.get("References"), headers["Message-ID"]]))
         message.set_content(report["email_body"])
         raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
-        return await self.call("gmail", "POST", "gmail/v1/users/me/messages/send", json={"raw": raw})
+        return {"raw": raw, **({"threadId": source["thread_id"]} if source else {})}
+
+    async def send(self, report):
+        return await self.call("gmail", "POST", "gmail/v1/users/me/messages/send", json=self.outgoing(report))
+
+    async def create_draft(self, report):
+        return await self.call("gmail", "POST", "gmail/v1/users/me/drafts",
+                               json={"message": self.outgoing(report)})
+
+    async def find_draft(self, correlation_id):
+        result = await self.call("gmail", "GET", "gmail/v1/users/me/drafts", params={
+            "q": f"rfc822msgid:{correlation_id.strip('<>')}", "maxResults": 10})
+        items = result.get("drafts", [])
+        if len(items) != 1:
+            return None
+        # Read the receipt rather than relying on fields omitted by the listing response.
+        return await self.call("gmail", "GET", f"gmail/v1/users/me/drafts/{items[0]['id']}",
+                               params={"format": "minimal"})
 
     async def reconcile(self, message_id):
         result = await self.call(

@@ -19,10 +19,11 @@ class Publication:
         async with self.db.transaction() as connection:
             row = await (
                 await connection.execute(
-                    """SELECT r.*,a.status AS approval_status,
+                    """SELECT r.*,runs.source_message,a.status AS approval_status,
                 p.id AS action_id,p.status AS action_status,p.kind AS action_kind,p.correlation_id
                 FROM publication_actions p JOIN approvals a ON a.id=p.approval_id
-                JOIN reports r ON r.id=a.report_id WHERE p.id=%s AND r.owner=%s""",
+                JOIN reports r ON r.id=a.report_id JOIN research_runs runs ON runs.id=r.run_id
+                WHERE p.id=%s AND r.owner=%s""",
                     (action_id, owner),
                 )
             ).fetchone()

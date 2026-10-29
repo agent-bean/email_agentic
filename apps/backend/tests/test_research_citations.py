@@ -20,6 +20,9 @@ async def test_research_corrects_unsupported_email_links_once_or_stops_without_r
         async def structured(self, run_id, schema, system, payload):
             self.calls += 1
             data = json.loads(payload)
+            # A URL in private context is not automatically evidence, even on the company's domain.
+            assert data["allowed_urls"] == ["https://example.com/source"]
+            assert "https://example.com/unsupported" in data["source_email"]
             if self.calls == 2:
                 assert data["citation_correction"]["allowed_urls"] == ["https://example.com/source"]
                 assert "unsupported" in data["citation_correction"]["previous_draft"]["email_body"]
@@ -36,7 +39,9 @@ async def test_research_corrects_unsupported_email_links_once_or_stops_without_r
     async with build_container(settings) as c:
         owner = f"{uuid.uuid4()}@example.invalid"
         run_id = await c.research.create(
-            owner, ResearchRequest(company_name="Company", domain="example.com"), str(uuid.uuid4())
+            owner, ResearchRequest(company_name="Company", domain="example.com",
+                                   source_email="Website: https://example.com/unsupported\nCustomer request"),
+            str(uuid.uuid4())
         )
         await db.execute("UPDATE research_runs SET identity_confirmed=true WHERE id=%s", (run_id,))
         for branch in ("company", "memory", "calendar", "web"):

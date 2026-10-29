@@ -48,6 +48,9 @@ class Jobs:
 
     async def recover(self):
         async with self.db.transaction() as connection:
+            await connection.execute("""UPDATE gmail_drafts SET status='unknown',error_code='worker_interrupted'
+                WHERE status='running' AND id IN (SELECT entity_id FROM jobs WHERE kind='gmail_draft'
+                AND ((status='running' AND lease_until<now()) OR status IN ('failed','done')))""")
             await connection.execute("""UPDATE publication_actions SET status='unknown',error_code='worker_interrupted'
                 WHERE kind='email' AND status='running' AND id IN
                 (SELECT entity_id FROM jobs WHERE kind='publish' AND ((status='running' AND lease_until<now()) OR status IN ('failed','done')))""")

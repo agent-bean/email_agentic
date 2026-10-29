@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from email_agentic.domains.approvals.service import Approvals
 from email_agentic.domains.companies.service import Companies
 from email_agentic.domains.inbox.service import Inbox
+from email_agentic.domains.inbox.drafts import GmailDrafts
 from email_agentic.domains.knowledge.service import Knowledge
 from email_agentic.domains.publication.service import Publication
 from email_agentic.domains.reports.service import Reports
@@ -66,6 +67,7 @@ class Container:
     tools: ToolExecutor
     llm: LLM
     google: Google
+    drafts: GmailDrafts
 
 
 @asynccontextmanager
@@ -80,6 +82,7 @@ async def build_container(settings):
         duckduckgo = DuckDuckGo(settings.duckduckgo_enabled)
         firecrawl = Firecrawl(client, settings.firecrawl_api_key.get_secret_value())
         publication = Publication(db, knowledge)
+        drafts = GmailDrafts(db)
         tools = ToolExecutor(db, settings.tool_limit_per_minute)
 
         async def lookup(request, context):
@@ -99,7 +102,38 @@ async def build_container(settings):
             return await firecrawl.scrape(request.url, request.timeout_seconds)
 
         async def read_email(request, context):
-            return await google.inbox()
+            known = await db.all("""SELECT source_id FROM inputs WHERE owner=%s AND provider='google'
+                AND kind='email' AND content->>'status'='succeeded'""", (context.owner,))
+            return await google.inbox({row["source_id"] for row in known})
+
+        async def create_draft(request, context):
+            report = await drafts.package(context.owner, request.action_id)
+            if report is None:
+                return {"status": "unchanged"}
+            try:
+                response = await google.find_draft(report["correlation_id"])
+                if response is None and not report["reconcile_only"]:
+                    response = await google.create_draft(report)
+                if response is None:
+                    await drafts.complete(request.action_id, "unknown", error="receipt_not_found")
+                    return {"status": "unknown"}
+                if not response.get("id") or response.get("message", {}).get("threadId") != report["source_message"]["thread_id"]:
+                    raise ProviderFailure("gmail", ambiguous=True, category="invalid_draft_receipt")
+                await drafts.complete(request.action_id, "succeeded", response["id"], response["message"]["threadId"])
+                return {"status": "succeeded"}
+            except ProviderFailure as exc:
+                if exc.ambiguous:
+                    # A lost POST response is not permission to create another draft.
+                    try:
+                        receipt = await google.find_draft(report["correlation_id"])
+                        if receipt and receipt.get("message", {}).get("threadId") == report["source_message"]["thread_id"]:
+                            await drafts.complete(request.action_id, "succeeded", receipt["id"], receipt["message"]["threadId"])
+                            return {"status": "succeeded"}
+                    except ProviderFailure:
+                        pass
+                await drafts.complete(request.action_id, "unknown" if exc.ambiguous or report["reconcile_only"] else "failed",
+                                      error=f"{exc.provider}:{exc.category}")
+                raise
 
         async def publish(request, context):
             report = await publication.package(context.owner, request.action_id)
@@ -127,10 +161,14 @@ async def build_container(settings):
             ("web.search", Search, "web:read", {"web"}, search),
             ("web.scrape", Scrape, "web:read", {"web"}, scrape),
             ("email.read", Empty, "email:read", {"email", "scheduler"}, read_email),
+            ("email.draft", Action, "email:draft", {"email"}, create_draft),
             ("email.send", Action, "publication:execute", {"publication"}, publish),
             ("knowledge.publish", Action, "publication:execute", {"publication"}, publish),
         ]:
             authorize = None
+            if name == "email.draft":
+                async def authorize(request, context):
+                    return await drafts.authorized(context.owner, request.action_id)
             if name in {"email.send", "knowledge.publish"}:
                 kind = "email" if name == "email.send" else "kb"
 
@@ -152,6 +190,7 @@ async def build_container(settings):
             tools,
             LLM(db, settings, client),
             google,
+            drafts,
         )
         try:
             yield container

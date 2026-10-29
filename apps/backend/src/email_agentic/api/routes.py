@@ -27,6 +27,8 @@ class RunSummary(BaseModel):
 
 class RunRecord(RunSummary):
     source_email: str | None = None
+    source_input_id: UUID | None = None
+    source_message: dict | None = None
 
 
 class ReportRow(BaseModel):
@@ -66,6 +68,8 @@ class RunDetail(BaseModel):
     branches: list[dict]
     evidence: list[dict]
     usage: list[dict]
+    gmail_drafts: list[dict]
+    gmail_drafts_available: bool
 
 
 class Created(BaseModel):
@@ -129,6 +133,11 @@ async def run_detail(run_id: UUID, request: Request, actor: Actor = Depends(auth
         "usage": await c.db.all(
             "SELECT model,input_tokens,output_tokens,cost FROM model_usage WHERE run_id=%s", (run_id,)
         ),
+        "gmail_drafts": await c.db.all(
+            "SELECT id,report_id,status,provider_id,thread_id,error_code FROM gmail_drafts WHERE run_id=%s ORDER BY created_at DESC",
+            (run_id,),
+        ),
+        "gmail_drafts_available": c.google.drafts_available,
     }
 
 
@@ -158,8 +167,28 @@ async def decide(
 @router.get("/inputs")
 async def inputs(request: Request, actor: Actor = Depends(authenticate)):
     return await request.app.state.container.db.all(
-        "SELECT * FROM inputs WHERE owner=%s ORDER BY created_at DESC LIMIT 100", (actor.owner,)
+        "SELECT * FROM inputs WHERE owner=%s ORDER BY COALESCE((content->>'received_at')::timestamptz,created_at) DESC LIMIT 100", (actor.owner,)
     )
+
+
+@router.get("/inputs/{input_id}")
+async def input_detail(input_id: UUID, request: Request, actor: Actor = Depends(authenticate)):
+    from email_agentic.platform.errors import NotFound
+
+    row = await request.app.state.container.db.one("SELECT * FROM inputs WHERE id=%s AND owner=%s",
+                                                (input_id, actor.owner))
+    if not row:
+        raise NotFound()
+    return row
+
+
+@router.post("/runs/{run_id}/gmail-draft", status_code=202, response_model=Created)
+async def gmail_draft(run_id: UUID, payload: IdentityDecision, request: Request, actor: Actor = Depends(authenticate)):
+    from email_agentic.platform.errors import Conflict
+
+    if not request.app.state.container.google.drafts_available:
+        raise Conflict("Cần kết nối Google với quyền gmail.compose để lưu Gmail Drafts")
+    return {"id": await request.app.state.container.drafts.request(actor.owner, run_id, payload.version)}
 
 
 @router.get("/knowledge")
@@ -190,6 +219,7 @@ async def system(request: Request):
             "duckduckgo": "configured" if c.settings.duckduckgo_enabled else "disabled",
             "firecrawl": "configured" if c.settings.firecrawl_api_key.get_secret_value() else "missing",
             "google": "configured" if c.settings.google_token_path.exists() else "missing",
+            "google_drafts": "configured" if c.google.drafts_available else "requires_consent",
         },
         "jobs": await c.db.all("SELECT kind,status,count(*) AS total FROM jobs GROUP BY kind,status"),
     }

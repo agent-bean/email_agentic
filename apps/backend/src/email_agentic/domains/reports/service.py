@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from psycopg.types.json import Jsonb
 
 from email_agentic.platform.errors import Conflict, NotFound
+from email_agentic.integrations.email_message import safe_addresses
 
 
 class Recipients(BaseModel):
@@ -79,14 +80,20 @@ class Reports:
             ).fetchone()
             if existing:
                 return existing["id"]
+            source = run.get("source_message") or {}
+            headers = source.get("headers", {})
+            recipients = safe_addresses(headers.get("Reply-To") or headers.get("From", ""))
+            subject = "Re: " + headers["Subject"] if headers.get("Subject") else draft.email_subject
+            if subject.lower().startswith("re: re:"):
+                subject = subject[4:]
             return await self.insert(
                 connection,
                 run,
                 1,
                 draft.markdown,
-                draft.email_subject,
+                subject,
                 draft.email_body,
-                {"to": [], "cc": [], "bcc": []},
+                {"to": recipients, "cc": [], "bcc": []},
                 False,
                 False,
                 quality,
@@ -108,6 +115,8 @@ class Reports:
             ).fetchone()
             if not old or old["version"] != request.version:
                 raise Conflict("Report version changed")
+            if run.get("source_message") and request.email_subject != old["email_subject"]:
+                raise Conflict("Keep the reply subject unchanged to preserve the Gmail thread")
             if request.send_email and not any(request.recipients.model_dump().values()):
                 raise Conflict("Choose at least one recipient before enabling send")
             await connection.execute(

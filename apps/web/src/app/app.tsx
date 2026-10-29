@@ -3,6 +3,7 @@ import { Link, NavLink, Route, Routes } from 'react-router-dom';
 import { Overview, NewResearch } from '../features/research';
 import { ResearchDetail } from '../features/research-detail';
 import { Collection, System } from '../features/collections';
+import { Inbox } from '../features/inbox';
 
 export function App() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -17,7 +18,7 @@ export function App() {
     <main id="main-content"><Routes>
       <Route path="/" element={<Overview />} /><Route path="/research/new" element={<NewResearch />} />
       <Route path="/research/:id" element={<ResearchDetail />} />
-      <Route path="/inputs" element={<Collection kind="inputs" title="Email & cuộc họp" />} />
+      <Route path="/inputs" element={<Inbox />} />
       <Route path="/companies" element={<Collection kind="companies" title="Doanh nghiệp" />} />
       <Route path="/knowledge" element={<Collection kind="knowledge" title="Kho tri thức" />} />
       <Route path="/system" element={<System />} />

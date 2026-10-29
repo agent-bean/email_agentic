@@ -61,6 +61,9 @@ class Worker:
             context = ToolContext(job["owner"], "scheduler", frozenset({"email:read"}))
             for message in await c.tools.execute("email.read", {}, context):
                 await c.inbox.save(job["owner"], "google", message["id"], "email", message)
+        elif job["kind"] == "gmail_draft":
+            context = ToolContext(job["owner"], "email", frozenset({"email:draft"}))
+            await c.tools.execute("email.draft", {"action_id": str(job["entity_id"])}, context)
         elif job["kind"] == "scan_calendar":
             now = datetime.now(UTC)
             context = ToolContext(job["owner"], "scheduler", frozenset({"calendar:read"}))
