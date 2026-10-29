@@ -83,3 +83,35 @@ def test_publication_date_accepts_provider_formats(value):
 @pytest.mark.parametrize("value", [None, "", "not a date"])
 def test_unknown_publication_date_stays_unknown(value):
     assert publication_date(value) is None
+
+
+async def test_secondary_provider_queue_does_not_occupy_active_search_slots():
+    secondary_started = asyncio.Event()
+    release_secondary = asyncio.Event()
+    primary_started = asyncio.Event()
+    primary_count = 0
+    secondary_slots = asyncio.Semaphore(1)
+
+    class Tools:
+        async def execute(self, name, request, context):
+            nonlocal primary_count
+            if request["provider"] == "duckduckgo":
+                async with secondary_slots:
+                    secondary_started.set()
+                    await release_secondary.wait()
+            else:
+                primary_count += 1
+                if primary_count == 6:
+                    primary_started.set()
+                await asyncio.sleep(0)
+            return {"results": []}
+
+    task = asyncio.create_task(WebResearchAgent(Tools(), duckduckgo_enabled=True).run(
+        {"company_name": "Company", "domain": "example.com"}, None
+    ))
+    try:
+        await asyncio.wait_for(secondary_started.wait(), 1)
+        await asyncio.wait_for(primary_started.wait(), 1)
+    finally:
+        release_secondary.set()
+        await task

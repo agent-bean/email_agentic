@@ -20,6 +20,7 @@ from email_agentic.agents.report_generation import ReportGenerationAgent
 from email_agentic.agents.web_research import WebResearchAgent
 from email_agentic.tools.harness import ToolContext
 from email_agentic.platform.errors import Conflict
+from email_agentic.platform.telemetry import tracer
 
 
 class ResearchState(TypedDict, total=False):
@@ -72,7 +73,10 @@ def make_graph(container, checkpointer):
             started = time.monotonic()
             token = node_started.set(started)
             try:
-                return await node(state)
+                with tracer().start_as_current_span(
+                    "research." + node.__name__, attributes={"research.run_id": str(run["id"])},
+                ):
+                    return await node(state)
             finally:
                 duration = time.monotonic() - started
                 node_started.reset(token)

@@ -133,7 +133,7 @@ async def test_new_run_records_page_limit_without_persisting_api_key(db):
         )
         run = await c.research.get(owner, run_id)
         assert run["config"]["firecrawl_max_pages"] == 4
-        assert run["config"]["workflow_version"] == 5
+        assert run["config"]["workflow_version"] == 6
         assert run["config"]["prompt_version"] == 10
         assert run["config"]["duckduckgo_enabled"] is True
         assert "test-only" not in json.dumps(run["config"])
@@ -163,3 +163,29 @@ async def test_page_reads_prioritize_missing_content_and_preserve_existing_searc
     }
     assert missing["raw_content"] == "Additional page content"
     assert missing["content"] == "Search excerpt"
+
+
+async def test_duplicate_page_content_is_reused_even_when_page_reading_is_disabled():
+    responses = [{"results": [
+        {"url": "https://example.com/product", "content": "Matched identity excerpt"},
+        {"url": "https://example.com/product#details", "raw_content": "Concrete deployment outcome"},
+    ]}]
+    await WebResearchAgent(None, read_pages=0).read_sources(responses, None)
+    first, second = responses[0]["results"]
+    assert first["raw_content"] == second["raw_content"] == "Concrete deployment outcome"
+    assert first["content"] == "Matched identity excerpt"
+
+
+async def test_failed_page_read_preserves_best_available_duplicate_excerpt():
+    class UnavailablePages:
+        async def execute(self, *args):
+            raise ProviderFailure("firecrawl", category="http_403")
+
+    responses = [{"results": [
+        {"url": "https://example.com/product", "raw_content": "Short"},
+        {"url": "https://example.com/product#details", "raw_content": "Specific documented deployment outcome"},
+    ]}]
+    await WebResearchAgent(UnavailablePages(), read_pages=1).read_sources(responses, None)
+    for item in responses[0]["results"]:
+        assert item["raw_content"] == "Specific documented deployment outcome"
+        assert item["page_read"] == {"status": "failed", "error_code": "http_403"}

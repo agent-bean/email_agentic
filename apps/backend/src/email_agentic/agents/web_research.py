@@ -24,9 +24,12 @@ class WebResearchAgent:
         ]
         # Leave capacity for the calendar request in the parallel collection branch.
         slots = asyncio.Semaphore(3)
+        provider_slots = {"tavily": asyncio.Semaphore(3), "duckduckgo": asyncio.Semaphore(1)}
 
         async def search(area, query, news, provider):
-            async with slots:
+            # Wait for the serial secondary provider before claiming shared capacity.
+            # Otherwise queued DDG calls can starve independent primary searches.
+            async with provider_slots[provider], slots:
                 try:
                     response = await self.tools.execute(
                         "web.search", {"query": query, "news": news, "provider": provider}, context
@@ -50,8 +53,6 @@ class WebResearchAgent:
         return responses
 
     async def read_sources(self, responses, context):
-        if not self.read_pages:
-            return
         # Round-robin by search rank preserves coverage across research topics.
         # Keep long search-provider page excerpts; spend page reads on missing content.
         available = {}
@@ -59,8 +60,9 @@ class WebResearchAgent:
             for item in response["results"]:
                 key = urldefrag(item.get("url", ""))[0].rstrip("/")
                 content = item.get("raw_content") or ""
-                if len(content.strip()) >= 6000 and len(content) > len(available.get(key, "")):
+                if key and len(content) > len(available.get(key, "")):
                     available[key] = content
+        sufficient = {key for key, content in available.items() if len(content.strip()) >= 6000}
         selected = {}
         max_results = max((len(response["results"]) for response in responses), default=0)
         for rank in range(max_results):
@@ -69,7 +71,7 @@ class WebResearchAgent:
                     continue
                 item = response["results"][rank]
                 url = urldefrag(item.get("url", ""))[0].rstrip("/")
-                if url and url not in available and url not in selected and len(selected) < self.read_pages:
+                if url and url not in sufficient and url not in selected and len(selected) < self.read_pages:
                     selected[url] = item["url"]
 
         slots = asyncio.Semaphore(2)
@@ -97,8 +99,9 @@ class WebResearchAgent:
             for item in response["results"]:
                 key = urldefrag(item.get("url", ""))[0].rstrip("/")
                 result = reads.get(key, {"status": "not_selected"})
-                if key in available:
+                if key in sufficient:
                     result = {"status": "not_selected", "reason": "search_content_available"}
+                if key in available:
                     item["raw_content"] = available[key]
                 item["page_read"] = {key: value for key, value in result.items() if key != "markdown"}
                 if result["status"] == "succeeded":

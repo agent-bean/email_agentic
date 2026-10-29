@@ -63,7 +63,7 @@ async def test_provider_errors_have_safe_stable_categories(monkeypatch, exceptio
     assert "provider detail" not in str(error.value)
 
 
-@pytest.mark.parametrize("category", ["rate_limited", "search_failed"])
+@pytest.mark.parametrize("category", ["rate_limited", "search_failed", "timeout"])
 async def test_blocked_secondary_provider_is_not_retried_and_pending_queries_obey_cooldown(monkeypatch, category):
     calls = []
     provider = DuckDuckGo()

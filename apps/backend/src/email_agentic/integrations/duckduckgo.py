@@ -26,7 +26,7 @@ class DuckDuckGo:
                 # by repeating requests that are already blocked or rate limited.
                 return await self._request(query, news)
             except ProviderFailure as exc:
-                if exc.category in {"rate_limited", "search_failed"}:
+                if exc.category in {"rate_limited", "search_failed", "timeout"}:
                     self.cooldown_until = asyncio.get_running_loop().time() + 60
                 raise
 
