@@ -69,6 +69,9 @@ mkdir -m 700 "$release"
 git -C "$base/source.git" archive "$revision" -- apps/backend apps/web infra \
   scripts/backup-production.sh scripts/retention-production.sh .dockerignore |
   python3 -c 'import sys,tarfile; tarfile.open(fileobj=sys.stdin.buffer,mode="r|").extractall(sys.argv[1],filter="data")' "$release"
+# tarfile's data filter leaves directory modes unset; root's private umask is 077.
+# Source is public and must remain readable by non-root users inside built images.
+find "$release" -type d -exec chmod 755 {} +
 printf '%s\n' "$revision" > "$release/.release-id"
 ln -s /etc/email-agentic/secrets "$release/.secrets"
 cd "$release"
@@ -76,6 +79,7 @@ export RELEASE_ID=$revision
 compose=(docker compose -f infra/compose.yaml -f infra/compose.production.yaml)
 "${compose[@]}" config --quiet
 "${compose[@]}" build api web
+docker run --rm --entrypoint python "email-agentic-backend:$revision" -c 'import email_agentic.platform.migrate'
 stage 'Exact main source fetched; backend and web images built.'
 # Refuse a busy cutover. A new request remains persisted for the next worker.
 for attempt in $(seq 1 60); do
