@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from email_agentic.integrations.http import json_request
 from email_agentic.platform.errors import ProviderFailure
+from email_agentic.platform.telemetry import tracer
 
 
 class LLM:
@@ -15,6 +16,13 @@ class LLM:
         self.db, self.settings, self.client = db, settings, client
 
     async def structured(self, run_id, schema, system, payload, *, input_id=None):
+        attributes = {"gen_ai.request.model": self.settings.llm_model}
+        if run_id is not None:
+            attributes["research.run_id"] = str(run_id)
+        with tracer().start_as_current_span("model.structured", attributes=attributes):
+            return await self._structured(run_id, schema, system, payload, input_id=input_id)
+
+    async def _structured(self, run_id, schema, system, payload, *, input_id=None):
         if not (
             self.settings.llm_model
             and self.settings.llm_base_url
