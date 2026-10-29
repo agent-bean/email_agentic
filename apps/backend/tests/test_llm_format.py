@@ -41,7 +41,7 @@ async def test_invalid_structured_output_gets_one_format_correction_and_counts_b
         )
     assert result.email_body == "Body"
     assert len(requests) == len(usage) == 2
-    assert all(row[3:] == (9, 2) for row in usage)
+    assert all(row[3:] == (9, 2, None) for row in usage)
     correction = json.dumps(requests[1]["messages"])
     assert "PRIVATE_ORIGINAL_CONTEXT" not in correction
     assert json.loads(requests[1]["messages"][1]["content"])["invalid_output"] == first

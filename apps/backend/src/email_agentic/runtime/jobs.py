@@ -15,14 +15,15 @@ class Jobs:
     def __init__(self, db):
         self.db = db
 
-    async def claim(self, kinds=None):
+    async def claim(self, kinds=None, excluded=()):
         token = uuid.uuid4()
         return await self.db.one(
             """UPDATE jobs SET status='running', attempt=attempt+1,
             claim_token=%s,lease_until=now()+interval '60 seconds'
             WHERE id=(SELECT id FROM jobs WHERE status='pending' AND available_at<=now() AND (%s::text[] IS NULL OR kind=ANY(%s))
+              AND NOT (kind=ANY(%s::text[]))
               ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING *""",
-            (token, kinds, kinds),
+            (token, kinds, kinds, list(excluded)),
         )
 
     async def heartbeat(self, job):

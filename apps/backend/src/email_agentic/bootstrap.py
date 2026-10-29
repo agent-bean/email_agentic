@@ -9,6 +9,8 @@ from email_agentic.domains.approvals.service import Approvals
 from email_agentic.domains.companies.service import Companies
 from email_agentic.domains.inbox.service import Inbox
 from email_agentic.domains.inbox.drafts import GmailDrafts
+from email_agentic.domains.inbox.automation import EmailAutomation
+from email_agentic.domains.inbox.sync import GmailSync
 from email_agentic.domains.knowledge.service import Knowledge
 from email_agentic.domains.publication.service import Publication
 from email_agentic.domains.reports.service import Reports
@@ -68,6 +70,7 @@ class Container:
     llm: LLM
     google: Google
     drafts: GmailDrafts
+    email_automation: EmailAutomation
 
 
 @asynccontextmanager
@@ -102,9 +105,7 @@ async def build_container(settings):
             return await firecrawl.scrape(request.url, request.timeout_seconds)
 
         async def read_email(request, context):
-            known = await db.all("""SELECT source_id FROM inputs WHERE owner=%s AND provider='google'
-                AND kind='email' AND content->>'status'='succeeded'""", (context.owner,))
-            return await google.inbox({row["source_id"] for row in known})
+            return await GmailSync(db, google, settings).run(context.owner)
 
         async def create_draft(request, context):
             report = await drafts.package(context.owner, request.action_id)
@@ -178,11 +179,13 @@ async def build_container(settings):
                     return await publication.authorized(context.owner, request.action_id, expected_kind)
 
             tools.register(name, Tool(schema, scope, frozenset(roles), handler, authorize))
+        research = ResearchService(db, settings)
+        llm = LLM(db, settings, client)
         container = Container(
             settings,
             db,
             Jobs(db),
-            ResearchService(db, settings),
+            research,
             Reports(db, knowledge),
             Approvals(db, companies),
             publication,
@@ -190,9 +193,10 @@ async def build_container(settings):
             companies,
             Inbox(db),
             tools,
-            LLM(db, settings, client),
+            llm,
             google,
             drafts,
+            EmailAutomation(db, research, llm, settings),
         )
         try:
             yield container

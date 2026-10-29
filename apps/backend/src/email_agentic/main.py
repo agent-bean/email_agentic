@@ -54,7 +54,7 @@ def create_app(settings=None):
     @app.get("/health/ready", include_in_schema=False)
     async def ready(request: Request):
         row = await request.app.state.container.db.one(
-            "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE name='004-send-gmail-draft.sql') AND to_regclass('checkpoints') IS NOT NULL AS ready"
+            "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE name='005-email-automation.sql') AND to_regclass('checkpoints') IS NOT NULL AS ready"
         )
         if not row["ready"]:
             return JSONResponse({"status": "migration_required"}, status_code=503)

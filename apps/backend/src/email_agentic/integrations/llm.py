@@ -14,7 +14,7 @@ class LLM:
     def __init__(self, db, settings, client):
         self.db, self.settings, self.client = db, settings, client
 
-    async def structured(self, run_id, schema, system, payload):
+    async def structured(self, run_id, schema, system, payload, *, input_id=None):
         if not (
             self.settings.llm_model
             and self.settings.llm_base_url
@@ -51,9 +51,9 @@ class LLM:
             usage = usage if isinstance(usage, dict) else {}
             # A malformed generation still consumes provider tokens.
             await self.db.execute(
-                "INSERT INTO model_usage(id,run_id,model,input_tokens,output_tokens) VALUES(%s,%s,%s,%s,%s)",
+                "INSERT INTO model_usage(id,run_id,model,input_tokens,output_tokens,input_id) VALUES(%s,%s,%s,%s,%s,%s)",
                 (uuid.uuid4(), run_id, self.settings.llm_model,
-                 usage.get("prompt_tokens"), usage.get("completion_tokens")),
+                 usage.get("prompt_tokens"), usage.get("completion_tokens"), input_id),
             )
             try:
                 choice = result["choices"][0]

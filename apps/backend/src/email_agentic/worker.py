@@ -59,8 +59,9 @@ class Worker:
             await c.tools.execute(name, {"action_id": str(action["id"])}, context)
         elif job["kind"] == "scan_email":
             context = ToolContext(job["owner"], "scheduler", frozenset({"email:read"}))
-            for message in await c.tools.execute("email.read", {}, context):
-                await c.inbox.save(job["owner"], "google", message["id"], "email", message)
+            await c.tools.execute("email.read", {}, context)
+        elif job["kind"] == "email_intake":
+            await c.email_automation.run(job["owner"], job["entity_id"])
         elif job["kind"] == "gmail_draft":
             context = ToolContext(job["owner"], "email", frozenset({"email:draft"}))
             await c.tools.execute("email.draft", {"action_id": str(job["entity_id"])}, context)
@@ -104,6 +105,11 @@ class Worker:
                     else type(exc).__name__
                 )
                 await self.c.jobs.finish(job, "failed", error, retry)
+                if job["kind"] == "email_intake":
+                    await self.c.db.execute(
+                        "UPDATE email_triage SET status=%s,error_code=%s,updated_at=now() WHERE input_id=%s AND owner=%s",
+                        ("queued" if retry else "failed", error, job["entity_id"], job["owner"]),
+                    )
                 if job["kind"] in {"research", "resume"} and not retry:
                     await self.c.research.status(job["entity_id"], "failed", error)
                 JOBS.labels(job["kind"], "failed").inc()
@@ -160,7 +166,9 @@ class Worker:
                 await self.schedule()
                 tasks = {task for task in tasks if not task.done()}
                 if len(tasks) < 4:
-                    job = await self.c.jobs.claim()
+                    job = await self.c.jobs.claim(
+                        excluded=() if self.c.settings.email_automation_enabled else ("email_intake",)
+                    )
                     if job:
                         task = asyncio.create_task(self.process(job))
                         tasks.add(task)

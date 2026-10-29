@@ -284,6 +284,15 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** IdentityConfirmation */
+        IdentityConfirmation: {
+            /** Version */
+            version: number;
+            /** Company Name */
+            company_name?: string | null;
+            /** Domain */
+            domain?: string | null;
+        };
         /** IdentityDecision */
         IdentityDecision: {
             /** Version */
@@ -610,7 +619,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["IdentityDecision"];
+                "application/json": components["schemas"]["IdentityConfirmation"];
             };
         };
         responses: {

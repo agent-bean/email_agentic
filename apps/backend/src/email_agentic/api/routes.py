@@ -2,7 +2,7 @@ from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from email_agentic.domains.reports.service import ReportEdit
 from email_agentic.domains.research.service import ResearchRequest
@@ -86,6 +86,20 @@ class IdentityDecision(BaseModel):
     version: int = Field(ge=1)
 
 
+class IdentityConfirmation(IdentityDecision):
+    company_name: str | None = None
+    domain: str | None = None
+
+    @model_validator(mode="after")
+    def validate_proposal(self):
+        if (self.company_name is None) != (self.domain is None):
+            raise ValueError("Provide both company name and domain")
+        if self.company_name is not None:
+            identity = ResearchRequest(company_name=self.company_name, domain=self.domain)
+            self.company_name, self.domain = identity.company_name, identity.domain
+        return self
+
+
 @router.get("/me")
 async def me(actor: Actor = Depends(authenticate)):
     return {"email": actor.owner, "role": actor.role}
@@ -149,9 +163,11 @@ async def run_detail(run_id: UUID, request: Request, actor: Actor = Depends(auth
 
 @router.post("/runs/{run_id}/identity", status_code=202)
 async def identity(
-    run_id: UUID, payload: IdentityDecision, request: Request, actor: Actor = Depends(authenticate)
+    run_id: UUID, payload: IdentityConfirmation, request: Request, actor: Actor = Depends(authenticate)
 ):
-    await request.app.state.container.approvals.confirm_identity(actor.owner, run_id, payload.version)
+    await request.app.state.container.approvals.confirm_identity(
+        actor.owner, run_id, payload.version, payload.company_name, payload.domain
+    )
     return {"status": "queued"}
 
 
@@ -173,7 +189,10 @@ async def decide(
 @router.get("/inputs")
 async def inputs(request: Request, actor: Actor = Depends(authenticate)):
     return await request.app.state.container.db.all(
-        "SELECT * FROM inputs WHERE owner=%s ORDER BY COALESCE((content->>'received_at')::timestamptz,created_at) DESC LIMIT 100", (actor.owner,)
+        """SELECT i.*,t.status AS intake_status,COALESCE(t.run_id,r.id) AS research_run_id FROM inputs i
+        LEFT JOIN email_triage t ON t.input_id=i.id AND t.owner=i.owner
+        LEFT JOIN research_runs r ON r.source_input_id=i.id AND r.owner=i.owner
+        WHERE i.owner=%s ORDER BY COALESCE((i.content->>'received_at')::timestamptz,i.created_at) DESC LIMIT 100""", (actor.owner,)
     )
 
 

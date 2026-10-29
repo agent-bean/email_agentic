@@ -1,4 +1,5 @@
 from functools import lru_cache
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
 
@@ -35,6 +36,13 @@ class Settings(BaseSettings):
     telemetry_endpoint: str = ""
     local_client_hosts: str = "127.0.0.1,::1,testclient"
     scheduler_enabled: bool = False
+    email_automation_enabled: bool = False
+    email_automation_start_at: datetime | None = None
+
+    @field_validator("email_automation_start_at", mode="before")
+    @classmethod
+    def empty_start(cls, value):
+        return None if value == "" else value
 
     @field_validator("research_timeout_seconds", mode="before")
     @classmethod
@@ -43,6 +51,10 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_security(self):
+        if self.email_automation_enabled and (
+            self.email_automation_start_at is None or self.email_automation_start_at.tzinfo is None
+        ):
+            raise ValueError("Email automation requires EMAIL_AUTOMATION_START_AT with timezone")
         if self.environment not in {"local", "production", "test"}:
             raise ValueError("APP_ENV must be local, production or test")
         if self.environment == "production" and not (self.cf_team_domain and self.cf_audience):

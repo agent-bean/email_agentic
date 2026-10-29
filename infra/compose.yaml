@@ -24,6 +24,9 @@ x-backend: &backend
     FIRECRAWL_MAX_PAGES: ${FIRECRAWL_MAX_PAGES:-12}
     GOOGLE_OAUTH_TOKEN_FILE: /run/secrets/google-token.json
     GOOGLE_CALENDAR_ID: ${GOOGLE_CALENDAR_ID:-primary}
+    SCHEDULER_ENABLED: ${SCHEDULER_ENABLED:-false}
+    EMAIL_AUTOMATION_ENABLED: ${EMAIL_AUTOMATION_ENABLED:-false}
+    EMAIL_AUTOMATION_START_AT: ${EMAIL_AUTOMATION_START_AT:-}
     APP_ORIGIN: ${APP_ORIGIN:-http://127.0.0.1:8000}
     CF_TEAM_DOMAIN: ${CF_TEAM_DOMAIN:-}
     CF_AUDIENCE: ${CF_AUDIENCE:-}
@@ -86,9 +89,6 @@ services:
   worker:
     <<: *backend
     command: ["python", "-m", "email_agentic.worker"]
-    environment:
-      <<: *environment
-      SCHEDULER_ENABLED: ${SCHEDULER_ENABLED:-false}
     mem_limit: 2g
   migrate:
     <<: *backend

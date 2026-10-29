@@ -22,6 +22,8 @@ Xem [kiến trúc](system-architecture.md) để hiểu hệ thống và checkli
 
 Không lưu secret vào dữ liệu nghiệp vụ, prompt hoặc checkpoint. Giữ thông tin truy vết sau khi dữ liệu thô hết hạn; nếu nội dung gốc không còn, nói rõ giới hạn kiểm tra lại. Ngày thu thập không thay ngày xuất bản. Suy luận nhu cầu phải dẫn về email làm căn cứ.
 
+Email intake chỉ đề xuất tên/domain và tạo run chờ xác nhận; owner có thể sửa cả hai trước khi xác nhận đúng phiên bản. Không chuyển kết quả classifier thành quyết định duyệt. Kết quả phân loại tách khỏi nội dung nguồn tại [migration email automation](../apps/backend/migrations/005-email-automation.sql); usage trước khi có run gắn input ID. [Gmail sync](../apps/backend/src/email_agentic/domains/inbox/sync.py) lưu input, công việc phân loại/trang tiếp theo và cursor trong cùng giao dịch; không cập nhật cursor khi trang đọc lỗi. Cutoff nhận thư được cấu hình trước khi bật automation để tránh nghiên cứu hàng loạt thư cũ.
+
 ## Phê duyệt có nghĩa gì?
 
 **Người dùng duyệt cả nội dung, người nhận và tùy chọn gửi/lưu, không chỉ báo cáo.** Backend kiểm đúng người, phiên bản, thời hạn và lựa chọn trước khi thực thi. UI tách Báo cáo và Email nháp; email được lưu theo phiên bản trong ứng dụng và có thể xuất sang Gmail Drafts theo yêu cầu riêng. Tạo draft không cấp quyền gửi hoặc duyệt; draft phiên bản cũ không tự bị ghi đè/xóa. Khi bật gửi email, phê duyệt cho phép gửi nội dung đó tới người nhận đã chọn.

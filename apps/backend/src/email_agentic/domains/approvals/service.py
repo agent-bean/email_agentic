@@ -7,7 +7,7 @@ class Approvals:
     def __init__(self, db, companies):
         self.db, self.companies = db, companies
 
-    async def confirm_identity(self, owner, run_id, version):
+    async def confirm_identity(self, owner, run_id, version, company_name=None, domain=None):
         async with self.db.transaction() as connection:
             run = await (
                 await connection.execute(
@@ -18,6 +18,14 @@ class Approvals:
                 raise NotFound()
             if run["status"] != "awaiting_identity" or run["version"] != version:
                 raise Conflict("Identity request changed")
+            if company_name is not None:
+                from email_agentic.domains.research.service import ResearchRequest
+                identity = ResearchRequest(company_name=company_name, domain=domain)
+                run = {**run, "company_name": identity.company_name, "domain": identity.domain}
+                await connection.execute(
+                    "UPDATE research_runs SET company_name=%s,domain=%s WHERE id=%s",
+                    (run["company_name"], run["domain"], run_id),
+                )
             await self.companies.confirm(connection, run)
             await connection.execute(
                 "UPDATE research_runs SET identity_confirmed=true,status='queued',version=version+1 WHERE id=%s",

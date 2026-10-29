@@ -106,6 +106,67 @@ class Google:
                     break
         return messages
 
+    async def sync_inbox(self, cursor, known=()):
+        """Read one page; the caller persists its cursor with inputs and follow-up jobs."""
+        profile = await self.call("gmail", "GET", "gmail/v1/users/me/profile")
+        if profile.get("emailAddress", "").casefold() != self.settings.owner_email.casefold():
+            raise ProviderFailure("gmail", category="mailbox_mismatch")
+        if not cursor:
+            cursor = {"mode": "full", "history_id": profile["historyId"]}
+        page = cursor.get("page_token")
+        if cursor["mode"] == "history":
+            params = {"startHistoryId": cursor["history_id"], "maxResults": 50}
+            if page:
+                params["pageToken"] = page
+            try:
+                response = await self.call("gmail", "GET", "gmail/v1/users/me/history", params=params)
+            except ProviderFailure as exc:
+                if exc.category != "http_404":
+                    raise
+                return await self.sync_inbox(None, known)
+            ids = []
+            for event in response.get("history", []):
+                for change in event.get("messagesAdded", []):
+                    message = change.get("message", {})
+                    if not message.get("labelIds") or "INBOX" in message["labelIds"]:
+                        ids.append(message["id"])
+                for change in event.get("labelsAdded", []):
+                    if "INBOX" in change.get("labelIds", []):
+                        ids.append(change["message"]["id"])
+        else:
+            params = {"labelIds": "INBOX", "maxResults": 50}
+            if page:
+                params["pageToken"] = page
+            response = await self.call("gmail", "GET", "gmail/v1/users/me/messages", params=params)
+            ids = [item["id"] for item in response.get("messages", [])]
+        messages = []
+        for message_id in dict.fromkeys(ids):
+            if message_id in known:
+                continue
+            try:
+                item = await self.call("gmail", "GET", f"gmail/v1/users/me/messages/{message_id}",
+                                       params={"format": "raw"})
+            except ProviderFailure as exc:
+                if exc.category == "http_404":
+                    continue  # Deleted during synchronization; it is no longer actionable.
+                raise
+            if "INBOX" not in item.get("labelIds", ["INBOX"]):
+                continue
+            if item.get("sizeEstimate", 0) > 25 * 1024 * 1024:
+                messages.append({"id": message_id, "status": "too_large"})
+                continue
+            try:
+                raw = base64.urlsafe_b64decode(item["raw"] + "===")
+                source = await decode_message(raw, message_id, item["threadId"])
+            except (KeyError, ValueError, TypeError):
+                raise ProviderFailure("gmail", category="invalid_message") from None
+            messages.append({**source, "mailbox": self.settings.owner_email,
+                             "received_at": datetime.fromtimestamp(int(item.get("internalDate", "0")) / 1000, UTC).isoformat()})
+        next_page = response.get("nextPageToken")
+        next_cursor = ({**cursor, "page_token": next_page} if next_page else
+                       {"mode": "history", "history_id": response.get("historyId", cursor["history_id"])})
+        return messages, next_cursor, bool(next_page)
+
     def outgoing(self, report):
         message = EmailMessage()
         message["From"] = self.settings.owner_email

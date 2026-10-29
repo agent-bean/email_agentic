@@ -49,7 +49,8 @@ async def decode_message(raw, message_id, thread_id):
         parser.feed(html)
         body = "".join(parser.text)
     headers = {key: str(message.get(key, "")) for key in
-               ("From", "To", "Cc", "Date", "Subject", "Message-ID", "Reply-To", "References")}
+               ("From", "To", "Cc", "Date", "Subject", "Message-ID", "Reply-To", "References",
+                "Auto-Submitted", "Precedence", "List-Id")}
     attachments = []
     total_bytes = 0
     # Walk all MIME levels, including attachments nested in multipart/mixed/related.
