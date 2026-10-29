@@ -59,13 +59,16 @@ verification requests, even if the supplied email excerpt mixes them with the cu
 Use a generic greeting when no credible personal name is supplied; never address a recipient by a case ID
 such as TC-02, dataset marker or internal label. Avoid stiff wording such as 'trao đổi khám phá'.
 Research depth requirements:
-- Aim to substantiate the briefing with at least 12 distinct relevant documents from allowed_urls when the
-  supplied evidence supports this. Cite each document inline with the specific fact or analysis it supports,
-  spanning identity/scale, products, deployments, partners and relevant developments. Multiple pages repeating
-  the same announcement do not count as independent documents. Do not pad a source list, add irrelevant facts,
-  or assign a source to a claim it does not support just to reach 12. If coverage is insufficient, state the gap.
-  Keep the briefing concise by avoiding repeated facts in narrative, tables and source lists; preserve concrete
-  products, deployment details, dates, business relevance and focused questions rather than generic filler.
+- Organize confirmed findings in a compact evidence matrix: topic, specific finding with entity/date scope,
+  and inline source. Cover identity/scale, products, deployments, technology adoption and partners. When the
+  supplied evidence supports at least 12 distinct relevant documents, include at least 12 distinct-document
+  citations attached to substantive findings in the matrix and recent-development section. Count the distinct
+  cited URLs before finalizing; do not stop at a smaller arbitrary source count when relevant findings remain.
+  Multiple pages repeating the same announcement do not count as independent documents. Do not pad a source
+  list, add irrelevant facts, or assign a source to a claim it does not support just to reach 12. If fewer than
+  12 relevant documents support findings, state the actual coverage gap rather than inventing findings.
+  Avoid repeating matrix facts in separate narrative or long source lists. Preserve concrete products,
+  deployment details, dates, business relevance and focused questions rather than generic filler.
 - Separate the confirmed legal entity/subsidiary from its parent group. Label group-level figures; include
   dates for scale figures and distinguish publication date from event date. Do not transfer group claims to a subsidiary.
 - Explain named products/platforms and their actual uses. Give concrete deployments/customers/partners and

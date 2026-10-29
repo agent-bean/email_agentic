@@ -134,6 +134,6 @@ async def test_new_run_records_page_limit_without_persisting_api_key(db):
         run = await c.research.get(owner, run_id)
         assert run["config"]["firecrawl_max_pages"] == 4
         assert run["config"]["workflow_version"] == 4
-        assert run["config"]["prompt_version"] == 9
+        assert run["config"]["prompt_version"] == 10
         assert run["config"]["duckduckgo_enabled"] is True
         assert "test-only" not in json.dumps(run["config"])
