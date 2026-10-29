@@ -2,6 +2,8 @@
 
 Đây là nền tảng ứng dụng, chưa phải bản hoàn tất các yêu cầu sản phẩm. Điểm bắt đầu cho đánh giá chất lượng là [hướng dẫn golden và eval](evaluation-guide.md); CI hiện có được mô tả tại [hướng dẫn CI](ci-guide.md).
 
+Chuẩn bị bản source bằng `make release` sau khi commit; xem [hướng dẫn VPS](vps-release-guide.md). Lệnh này không chuyển secret, gửi email hoặc triển khai dịch vụ.
+
 ## Kiến trúc đã chọn
 
 Một repo chứa React web và FastAPI backend. Web và backend có image riêng để cập nhật/rollback giao diện độc lập; API và worker dùng chung image backend vì dùng cùng code và dependencies. Web chuyển tiếp API cùng origin để giữ một đường đăng nhập. Worker chạy workflow LangGraph cố định. Bảy vai trò được giữ trong cùng backend, không dùng agent lead hoặc bảy dịch vụ riêng.

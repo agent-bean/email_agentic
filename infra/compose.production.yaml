@@ -1,0 +1,31 @@
+# Use with compose.yaml; never combine with compose.local.yaml.
+name: email-agentic-vps
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+services:
+  web:
+    image: email-agentic-web:${RELEASE_ID:?Set the release commit ID}
+    logging: *logging
+  api:
+    image: email-agentic-backend:${RELEASE_ID:?Set the release commit ID}
+    logging: *logging
+  worker:
+    image: email-agentic-backend:${RELEASE_ID:?Set the release commit ID}
+    logging: *logging
+  migrate:
+    image: email-agentic-backend:${RELEASE_ID:?Set the release commit ID}
+    logging: *logging
+  postgres:
+    logging: *logging
+  prometheus:
+    restart: unless-stopped
+    logging: *logging
+  tempo:
+    restart: unless-stopped
+    logging: *logging
+  grafana:
+    restart: unless-stopped
+    logging: *logging

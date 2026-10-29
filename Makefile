@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 APP_CONTROL := uv run --project apps/backend python scripts/app-control.py
 
-.PHONY: help setup check db build migrate up down status test web-build lint typecheck
+.PHONY: help setup check db build migrate up down status test web-build lint typecheck release
 
 help: ## Show local development commands
 	@awk 'BEGIN {FS = ":.*## "; print "Run from the repository root:"} /^[a-z-]+:.*## / {printf "  make %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -38,7 +38,10 @@ web-build: ## Typecheck and build the web application locally
 	npm run build --prefix apps/web
 
 lint: ## Lint the application backend and local stack helper
-	uv run --project apps/backend ruff check --config apps/backend/pyproject.toml apps/backend/src apps/backend/tests scripts/app-control.py
+	uv run --project apps/backend ruff check --config apps/backend/pyproject.toml apps/backend/src apps/backend/tests scripts/app-control.py scripts/prepare-release.py
 
 typecheck: ## Typecheck the web application
 	npm run typecheck --prefix apps/web
+
+release: ## Package committed deployment source without credentials or runtime data
+	python3 scripts/prepare-release.py
