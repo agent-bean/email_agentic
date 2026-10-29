@@ -1,83 +1,79 @@
-import { useEffect, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import Markdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import {
-  api,
-  post,
-  type Detail,
-  type Report,
-  type ReportEdit,
-} from '../lib/api';
-import { ErrorMessage, Status } from '../components/status';
+import { useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { api, post, type Detail, type Report } from "../lib/api";
+import { ErrorMessage, Status } from "../components/status";
+import { ReportEditor } from "./report-editor";
+import { ResearchProgress } from "../components/research-progress";
 import {
   Attachments,
   MeetingSource,
   type MeetingEvent,
   type SourceMessage,
-} from './inbox';
+} from "./inbox";
 
 const qualityLabels: Record<string, string> = {
-  cited_sources: 'Nguồn trích dẫn',
-  source_target_met: 'Đủ số nguồn mục tiêu',
-  elapsed_seconds: 'Thời gian xử lý chủ động (giây)',
-  target_seconds: 'Mục tiêu thời gian (giây)',
-  time_target_met: 'Xử lý chủ động trong mục tiêu',
-  prd_elapsed_seconds: 'Thời gian nhận yêu cầu đến có nháp (giây)',
-  prd_time_target_met: 'Đạt mục tiêu thời gian đầu-cuối',
-  identity_wait_seconds: 'Thời gian chờ xác nhận đã loại trừ (giây)',
-  timing_basis: 'Cách đo thời gian xử lý',
-  prd_timing_basis: 'Cách đo thời gian đầu-cuối',
-  markdown_ready_at: 'Thời điểm có nháp',
-  factual_accuracy: 'Độ chính xác',
-  completeness: 'Độ đầy đủ',
-  readiness: 'Sẵn sàng sử dụng',
-  branch_failures: 'Bước gặp lỗi',
-  search_failures: 'Lỗi tìm kiếm',
-  page_reads: 'Đọc trang web',
-  citation_correction_attempted: 'Đã yêu cầu sửa link nguồn',
-  human_edited: 'Đã chỉnh sửa',
-  content_review: 'Kiểm tra nội dung',
-  succeeded: 'Thành công',
-  failed: 'Lỗi',
-  not_selected: 'Không chọn đọc',
+  cited_sources: "Nguồn trích dẫn",
+  source_target_met: "Đủ số nguồn mục tiêu",
+  elapsed_seconds: "Thời gian xử lý chủ động (giây)",
+  target_seconds: "Mục tiêu thời gian (giây)",
+  time_target_met: "Xử lý chủ động trong mục tiêu",
+  prd_elapsed_seconds: "Thời gian nhận yêu cầu đến có nháp (giây)",
+  prd_time_target_met: "Đạt mục tiêu thời gian đầu-cuối",
+  identity_wait_seconds: "Thời gian chờ xác nhận đã loại trừ (giây)",
+  timing_basis: "Cách đo thời gian xử lý",
+  prd_timing_basis: "Cách đo thời gian đầu-cuối",
+  markdown_ready_at: "Thời điểm có nháp",
+  factual_accuracy: "Độ chính xác",
+  completeness: "Độ đầy đủ",
+  readiness: "Sẵn sàng sử dụng",
+  branch_failures: "Bước gặp lỗi",
+  search_failures: "Lỗi tìm kiếm",
+  page_reads: "Đọc trang web",
+  citation_correction_attempted: "Đã yêu cầu sửa link nguồn",
+  human_edited: "Đã chỉnh sửa",
+  content_review: "Kiểm tra nội dung",
+  succeeded: "Thành công",
+  failed: "Lỗi",
+  not_selected: "Không chọn đọc",
 };
 function qualityValue(value: unknown): string {
-  if (value == null) return '—';
-  if (typeof value === 'boolean') return value ? 'Có' : 'Không';
+  if (value == null) return "—";
+  if (typeof value === "boolean") return value ? "Có" : "Không";
   if (Array.isArray(value))
-    return value.map(qualityValue).join(', ') || 'Không có';
-  if (typeof value === 'object')
+    return value.map(qualityValue).join(", ") || "Không có";
+  if (typeof value === "object")
     return Object.entries(value)
       .map(
         ([key, item]) => `${qualityLabels[key] ?? key}: ${qualityValue(item)}`,
       )
-      .join(' · ');
-  if (typeof value === 'number')
+      .join(" · ");
+  if (typeof value === "number")
     return Number.isInteger(value) ? String(value) : value.toFixed(1);
   return (
     (
       {
-        active_processing: 'Chỉ tính xử lý; không gồm queue và chờ xác nhận',
+        active_processing: "Chỉ tính xử lý; không gồm queue và chờ xác nhận",
         received_to_markdown_excluding_identity_wait:
-          'Gồm queue; loại thời gian chờ xác nhận đã ghi nhận',
-        requires_review: 'Cần kiểm tra',
-        required: 'Cần kiểm tra',
-        not_evaluated: 'Chưa đánh giá',
+          "Gồm queue; loại thời gian chờ xác nhận đã ghi nhận",
+        requires_review: "Cần kiểm tra",
+        required: "Cần kiểm tra",
+        not_evaluated: "Chưa đánh giá",
       } as Record<string, string>
     )[String(value)] ?? String(value)
   );
 }
 const branchLabels: Record<string, string> = {
-  company: 'Doanh nghiệp',
-  email: 'Email',
-  calendar: 'Lịch họp',
-  web: 'Nguồn web',
-  memory: 'Ngữ cảnh đã lưu',
-  knowledge: 'Kho tri thức',
+  company: "Doanh nghiệp",
+  email: "Email",
+  calendar: "Lịch họp",
+  web: "Nguồn web",
+  memory: "Ngữ cảnh đã lưu",
+  knowledge: "Kho tri thức",
 };
-const dateTime = (value: string) => new Date(value).toLocaleString('vi-VN');
+const dateTime = (value: string) => new Date(value).toLocaleString("vi-VN");
 
 function ReportDownloads({ report, runId }: { report: Report; runId: string }) {
   const [file, setFile] = useState<{ id: string; filename: string } | null>(
@@ -98,7 +94,7 @@ function ReportDownloads({ report, runId }: { report: Report; runId: string }) {
         email.
       </p>
       <div className="actions">
-        {(['pdf', 'docx', 'md'] as const).map((format) => (
+        {(["pdf", "docx", "md"] as const).map((format) => (
           <button
             className="secondary"
             key={format}
@@ -106,9 +102,9 @@ function ReportDownloads({ report, runId }: { report: Report; runId: string }) {
             onClick={() => download.mutate(format)}
           >
             {download.isPending && download.variables === format
-              ? 'Đang tạo file…'
-              : format === 'docx'
-                ? 'Word'
+              ? "Đang tạo file…"
+              : format === "docx"
+                ? "Word"
                 : format.toUpperCase()}
           </button>
         ))}
@@ -127,238 +123,18 @@ function ReportDownloads({ report, runId }: { report: Report; runId: string }) {
   );
 }
 
-function ReportEditor({
-  report,
-  runId,
-  refresh,
-  onDirty,
-}: {
-  report: Report;
-  runId: string;
-  refresh: () => void;
-  onDirty: (dirty: boolean) => void;
-}) {
-  const initial: ReportEdit = {
-    version: report.version,
-    markdown: report.markdown,
-    email_subject: report.email_subject,
-    email_body: report.email_body,
-    recipients: {
-      to: report.recipients.to ?? [],
-      cc: report.recipients.cc ?? [],
-      bcc: report.recipients.bcc ?? [],
-    },
-    send_email: report.send_email,
-    save_kb: report.save_kb,
-    attachment_formats: report.artifacts.map(
-      (a) => a.format as 'pdf' | 'docx' | 'md',
-    ),
-  };
-  const [edit, setEdit] = useState(initial);
-  const [recipientText, setRecipientText] = useState({
-    to: (report.recipients.to ?? []).join(', '),
-    cc: (report.recipients.cc ?? []).join(', '),
-    bcc: (report.recipients.bcc ?? []).join(', '),
-  });
-  // Keep raw text while typing so commas and spaces are not removed mid-edit.
-  const recipients = Object.fromEntries(
-    Object.entries(recipientText).map(([kind, text]) => [
-      kind,
-      text
-        .split(',')
-        .map((address) => address.trim())
-        .filter(Boolean),
-    ]),
-  );
-  const editedReport = { ...edit, recipients };
-  const dirty = JSON.stringify(initial) !== JSON.stringify(editedReport);
-  useEffect(() => {
-    onDirty(dirty);
-    return () => onDirty(false);
-  }, [dirty, onDirty]);
-  useEffect(() => {
-    if (!dirty) return;
-    const warn = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-    };
-    const guardNavigation = (event: MouseEvent) => {
-      const link =
-        event.target instanceof Element
-          ? event.target.closest('a[href]')
-          : null;
-      if (
-        !(link instanceof HTMLAnchorElement) ||
-        link.target === '_blank' ||
-        event.ctrlKey ||
-        event.metaKey ||
-        event.shiftKey ||
-        event.altKey
-      )
-        return;
-      const target = new URL(link.href);
-      if (
-        target.pathname === window.location.pathname &&
-        target.search === window.location.search
-      )
-        return;
-      if (
-        !window.confirm(
-          'Có thay đổi chưa lưu. Rời trang và bỏ các thay đổi này?',
-        )
-      ) {
-        event.preventDefault();
-        event.stopPropagation();
-      }
-    };
-    window.addEventListener('beforeunload', warn);
-    document.addEventListener('click', guardNavigation, true);
-    return () => {
-      window.removeEventListener('beforeunload', warn);
-      document.removeEventListener('click', guardNavigation, true);
-    };
-  }, [dirty]);
-  const save = useMutation({
-    mutationFn: () =>
-      api(`/runs/${runId}/report`, {
-        method: 'PUT',
-        body: JSON.stringify(editedReport),
-      }),
-    onSuccess: refresh,
-  });
-  return (
-    <details id="report-editor" className="panel editor">
-      <summary>Chỉnh sửa nội dung & tùy chọn</summary>
-      <form
-        className="form"
-        onSubmit={(e) => {
-          e.preventDefault();
-          save.mutate();
-        }}
-      >
-        <p className="muted">
-          Lưu sẽ tạo phiên bản mới và yêu cầu duyệt lại. Bản đang chỉnh sửa chưa
-          được dùng để gửi.
-        </p>
-        <fieldset disabled={save.isPending}>
-          <legend>Báo cáo · nội bộ</legend>
-          <label>
-            Nội dung Markdown
-            <textarea
-              rows={16}
-              value={edit.markdown}
-              onChange={(e) => setEdit({ ...edit, markdown: e.target.value })}
-            />
-          </label>
-        </fieldset>
-        <fieldset disabled={save.isPending}>
-          <legend>Email nháp · gửi khách / đối tác</legend>
-          <label>
-            Tiêu đề
-            <input
-              value={edit.email_subject}
-              onChange={(e) =>
-                setEdit({ ...edit, email_subject: e.target.value })
-              }
-            />
-          </label>
-          <label>
-            Nội dung email
-            <textarea
-              rows={9}
-              value={edit.email_body}
-              onChange={(e) => setEdit({ ...edit, email_body: e.target.value })}
-            />
-          </label>
-        </fieldset>
-        <fieldset disabled={save.isPending}>
-          <legend>Người nhận</legend>
-          <p className="muted">Phân cách các địa chỉ bằng dấu phẩy.</p>
-          {(['to', 'cc', 'bcc'] as const).map((key) => (
-            <label key={key}>
-              {key.toUpperCase()}
-              <input
-                type="email"
-                multiple
-                value={recipientText[key]}
-                onChange={(e) =>
-                  setRecipientText({ ...recipientText, [key]: e.target.value })
-                }
-              />
-            </label>
-          ))}
-        </fieldset>
-        <fieldset disabled={save.isPending}>
-          <legend>Sau khi duyệt</legend>
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={edit.send_email}
-              onChange={(e) =>
-                setEdit({ ...edit, send_email: e.target.checked })
-              }
-            />
-            Gửi email tới người nhận
-          </label>
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={edit.save_kb}
-              onChange={(e) => setEdit({ ...edit, save_kb: e.target.checked })}
-            />
-            Lưu báo cáo vào kho tri thức
-          </label>
-        </fieldset>
-        <fieldset disabled={save.isPending}>
-          <legend>File đính kèm email</legend>
-          <p className="notice">
-            Báo cáo chứa phân tích nội bộ. Chỉ chọn đính kèm khi nội dung phù
-            hợp với người nhận. Lưu phiên bản mới rồi mở file bên dưới để kiểm
-            tra trước khi duyệt.
-          </p>
-          {(['pdf', 'docx', 'md'] as const).map((format) => (
-            <label className="check" key={format}>
-              <input
-                type="checkbox"
-                checked={(edit.attachment_formats ?? []).includes(format)}
-                onChange={(e) =>
-                  setEdit({
-                    ...edit,
-                    attachment_formats: e.target.checked
-                      ? [...(edit.attachment_formats ?? []), format]
-                      : edit.attachment_formats?.filter((f) => f !== format),
-                  })
-                }
-              />
-              {format === 'docx' ? 'Word' : format.toUpperCase()}
-            </label>
-          ))}
-        </fieldset>
-        <ErrorMessage error={save.error} />
-        <div className="save-bar">
-          <span className="muted" role="status">
-            {dirty ? 'Có thay đổi chưa lưu' : 'Chưa có thay đổi'}
-          </span>
-          <button disabled={save.isPending || !dirty}>
-            {save.isPending ? 'Đang lưu…' : 'Lưu phiên bản mới'}
-          </button>
-        </div>
-      </form>
-    </details>
-  );
-}
-
 export function ResearchDetail() {
   const id = useParams().id!;
   const [params, setParams] = useSearchParams();
-  const view = params.get('view') === 'email' ? 'email' : 'report';
+  const view = params.get("view") === "email" ? "email" : "report";
   const [dirty, setDirty] = useState(false);
   const client = useQueryClient();
   const refresh = () => {
-    void client.invalidateQueries({ queryKey: ['run', id] });
-    void client.invalidateQueries({ queryKey: ['runs'] });
+    void client.invalidateQueries({ queryKey: ["run", id] });
+    void client.invalidateQueries({ queryKey: ["runs"] });
   };
   const query = useQuery({
-    queryKey: ['run', id],
+    queryKey: ["run", id],
     queryFn: () => api<Detail>(`/runs/${id}`),
     refetchInterval: 3000,
   });
@@ -411,24 +187,24 @@ export function ResearchDetail() {
   const meeting = run.source_meeting as MeetingEvent | null;
   const report = run.history_purged_at ? undefined : reports[0];
   const emailAlreadySent = gmail_drafts.some(
-    (d) => d.status === 'sent' && d.matches_current === true,
+    (d) => d.status === "sent" && d.matches_current === true,
   );
   const currentDraft = gmail_drafts.find(
     (draft) =>
       draft.report_id === report?.id &&
-      !['unknown', 'failed'].includes(String(draft.status)),
+      !["unknown", "failed"].includes(String(draft.status)),
   );
   const hasUnknownDraft = gmail_drafts.some(
-    (draft) => draft.report_id === report?.id && draft.status === 'unknown',
+    (draft) => draft.report_id === report?.id && draft.status === "unknown",
   );
   const hasMatchingDraft = gmail_drafts.some(
-    (draft) => draft.matches_current === true && draft.status === 'succeeded',
+    (draft) => draft.matches_current === true && draft.status === "succeeded",
   );
-  let gmailDraftLabel = 'Lưu vào Gmail Drafts';
-  if (emailAlreadySent) gmailDraftLabel = 'Email đã gửi';
-  else if (exportDraft.isPending) gmailDraftLabel = 'Đang yêu cầu…';
-  else if (hasUnknownDraft) gmailDraftLabel = 'Đối chiếu Gmail Draft';
-  else if (hasMatchingDraft) gmailDraftLabel = 'Đã lưu Gmail Drafts';
+  let gmailDraftLabel = "Lưu vào Gmail Drafts";
+  if (emailAlreadySent) gmailDraftLabel = "Email đã gửi";
+  else if (exportDraft.isPending) gmailDraftLabel = "Đang yêu cầu…";
+  else if (hasUnknownDraft) gmailDraftLabel = "Đối chiếu Gmail Draft";
+  else if (hasMatchingDraft) gmailDraftLabel = "Đã lưu Gmail Drafts";
   const approval = approvals.find((item) => item.report_id === report?.id);
   const approvalLabel = report?.send_email
     ? `Duyệt và gửi email v${report.version}`
@@ -448,12 +224,23 @@ export function ResearchDetail() {
           <p className="eyebrow">NGHIÊN CỨU DOANH NGHIỆP</p>
           <h1>{run.company_name}</h1>
           <p className="muted">
-            {run.domain} <span className="separator">/</span>{' '}
+            {run.domain} <span className="separator">/</span>{" "}
             {dateTime(run.created_at)}
           </p>
         </div>
         <Status value={run.status} />
       </header>
+      {!run.history_purged_at && (
+        <ResearchProgress
+          status={run.status}
+          hasReport={Boolean(report)}
+          approvalStatus={approval?.status}
+          expired={expired && approval?.status === "pending"}
+          hasUnknownAction={actions.some(
+            (action) => action.status === "unknown",
+          )}
+        />
+      )}
       <ErrorMessage
         error={
           query.error || confirm.error || decision.error || exportDraft.error
@@ -461,10 +248,10 @@ export function ResearchDetail() {
       />
       {run.raw_purged_at && (
         <p className="notice">
-          Dữ liệu nguồn đã hết thời hạn lưu.{' '}
+          Dữ liệu nguồn đã hết thời hạn lưu.{" "}
           {run.history_purged_at
-            ? 'Nội dung báo cáo và file cũng đã hết thời hạn lưu.'
-            : 'Báo cáo được giữ đến hết thời hạn lưu báo cáo.'}
+            ? "Nội dung báo cáo và file cũng đã hết thời hạn lưu."
+            : "Báo cáo được giữ đến hết thời hạn lưu báo cáo."}
         </p>
       )}
       {meeting && (
@@ -477,7 +264,7 @@ export function ResearchDetail() {
           </p>
         </section>
       )}
-      {run.status === 'awaiting_identity' && (
+      {run.status === "awaiting_identity" && (
         <section className="panel notice">
           <h2>Xác nhận doanh nghiệp</h2>
           <p>
@@ -491,8 +278,8 @@ export function ResearchDetail() {
               event.preventDefault();
               const values = new FormData(event.currentTarget);
               confirm.mutate({
-                company_name: String(values.get('company_name')),
-                domain: String(values.get('domain')),
+                company_name: String(values.get("company_name")),
+                domain: String(values.get("domain")),
               });
             }}
           >
@@ -518,7 +305,7 @@ export function ResearchDetail() {
               <small>Chỉ nhập domain, không có https:// hoặc đường dẫn.</small>
             </label>
             <button disabled={confirm.isPending}>
-              {confirm.isPending ? 'Đang xác nhận…' : 'Xác nhận và nghiên cứu'}
+              {confirm.isPending ? "Đang xác nhận…" : "Xác nhận và nghiên cứu"}
             </button>
           </form>
         </section>
@@ -531,24 +318,26 @@ export function ResearchDetail() {
       <div className="detail-grid">
         <div className="detail-content">
           {report && (
-            <ReportDownloads key={report.id} report={report} runId={run.id} />
-          )}
-          {report && (
             <nav className="view-switch" aria-label="Nội dung nghiên cứu">
-              {(['report', 'email'] as const).map((tab) => (
+              {(["report", "email"] as const).map((tab) => (
                 <button
                   key={tab}
-                  className={view === tab ? 'selected' : ''}
-                  aria-current={view === tab ? 'page' : undefined}
+                  className={view === tab ? "selected" : ""}
+                  aria-current={view === tab ? "page" : undefined}
                   onClick={() =>
                     setParams((previous) => {
                       const next = new URLSearchParams(previous);
-                      next.set('view', tab);
+                      next.set("view", tab);
                       return next;
                     })
                   }
                 >
-                  {tab === 'report' ? 'Báo cáo' : 'Email nháp'}
+                  <span>
+                    {tab === "report" ? "Báo cáo" : "Email nháp"}
+                    <small>
+                      {tab === "report" ? "Dùng nội bộ" : "Gửi khách / đối tác"}
+                    </small>
+                  </span>
                 </button>
               ))}
               <a className="review-link" href="#review">
@@ -556,7 +345,7 @@ export function ResearchDetail() {
               </a>
             </nav>
           )}
-          {(view === 'email' || !report) && (
+          {(view === "email" || !report) && (
             <>
               {!meeting && (
                 <section
@@ -569,8 +358,8 @@ export function ResearchDetail() {
                     <>
                       <p className="surface-description">
                         {gmailSource
-                          ? 'Email lấy trực tiếp từ Gmail; giữ nội dung và thread gốc.'
-                          : 'Email được cung cấp khi tạo nghiên cứu, hiển thị nguyên văn.'}
+                          ? "Email lấy trực tiếp từ Gmail; giữ nội dung và thread gốc."
+                          : "Email được cung cấp khi tạo nghiên cứu, hiển thị nguyên văn."}
                       </p>
                       <div className="preserve source-email-body">
                         {run.source_email}
@@ -578,7 +367,7 @@ export function ResearchDetail() {
                       {gmailSource && (
                         <>
                           <a
-                            href={`https://mail.google.com/mail/u/?authuser=${encodeURIComponent(gmailSource.mailbox ?? '')}#all/${gmailSource.thread_id}`}
+                            href={`https://mail.google.com/mail/u/?authuser=${encodeURIComponent(gmailSource.mailbox ?? "")}#all/${gmailSource.thread_id}`}
                             target="_blank"
                             rel="noopener noreferrer"
                           >
@@ -619,15 +408,15 @@ export function ResearchDetail() {
                 <div className="surface-heading">
                   <div>
                     <p className="eyebrow">
-                      {view === 'report'
-                        ? 'DÙNG NỘI BỘ'
-                        : 'GỬI KHÁCH / ĐỐI TÁC'}
+                      {view === "report"
+                        ? "DÙNG NỘI BỘ"
+                        : "GỬI KHÁCH / ĐỐI TÁC"}
                     </p>
-                    <h2>{view === 'report' ? 'Báo cáo' : 'Email nháp'}</h2>
+                    <h2>{view === "report" ? "Báo cáo" : "Email nháp"}</h2>
                   </div>
                   <span className="version">v{report.version}</span>
                 </div>
-                {view === 'report' ? (
+                {view === "report" ? (
                   <>
                     <p className="surface-description">
                       Thông tin doanh nghiệp, nguồn tham khảo và phân tích để
@@ -637,7 +426,7 @@ export function ResearchDetail() {
                       <Markdown
                         remarkPlugins={[remarkGfm]}
                         skipHtml
-                        disallowedElements={['img']}
+                        disallowedElements={["img"]}
                         components={{
                           table: ({ children }) => (
                             <div
@@ -659,22 +448,22 @@ export function ResearchDetail() {
                   <>
                     <p className="surface-description">
                       {gmailSource
-                        ? 'Có thể lưu phiên bản này vào Gmail Drafts trong thread gốc. Thao tác này chưa gửi email.'
-                        : 'Bản nháp đang lưu trong ứng dụng. Chọn email từ Gmail để tạo reply trong đúng thread.'}
+                        ? "Có thể lưu phiên bản này vào Gmail Drafts trong thread gốc. Thao tác này chưa gửi email."
+                        : "Bản nháp đang lưu trong ứng dụng. Chọn email từ Gmail để tạo reply trong đúng thread."}
                     </p>
                     {Number(run.config.prompt_version ?? 0) < 5 && (
                       <p className="notice inline-notice">
-                        <strong>Email này được soạn theo hướng dẫn cũ;</strong>{' '}
+                        <strong>Email này được soạn theo hướng dẫn cũ;</strong>{" "}
                         cần soạn lại trước khi gửi khách.
                       </p>
                     )}
                     <dl className="email-addresses">
-                      {(['to', 'cc', 'bcc'] as const).map((key) => (
+                      {(["to", "cc", "bcc"] as const).map((key) => (
                         <div key={key}>
                           <dt>{key.toUpperCase()}</dt>
                           <dd>
-                            {(report.recipients[key] ?? []).join(', ') ||
-                              (key === 'to' ? 'Chưa chọn người nhận' : '—')}
+                            {(report.recipients[key] ?? []).join(", ") ||
+                              (key === "to" ? "Chưa chọn người nhận" : "—")}
                           </dd>
                         </div>
                       ))}
@@ -696,7 +485,7 @@ export function ResearchDetail() {
                         </button>
                         <p className="muted">
                           {!query.data.gmail_drafts_available &&
-                            'Cần cấp bổ sung quyền Gmail để lưu draft. Xem trang Kết nối & vận hành. '}
+                            "Cần cấp bổ sung quyền Gmail để lưu draft. Xem trang Kết nối & vận hành. "}
                           Nội dung không đổi sẽ dùng lại draft đã xuất. Bản đã
                           xuất không tự cập nhật khi chỉnh sửa trong ứng dụng
                           hoặc Gmail. Gửi từ ứng dụng sẽ dùng draft khớp nội
@@ -707,9 +496,9 @@ export function ResearchDetail() {
                           <p key={String(d.id)}>
                             {d.report_id === report.id
                               ? `Phiên bản ${report.version}`
-                              : 'Phiên bản trước'}
-                            :{' '}
-                            {d.status === 'pending' ? (
+                              : "Phiên bản trước"}
+                            :{" "}
+                            {d.status === "pending" ? (
                               <span>Đang chờ tạo draft</span>
                             ) : (
                               <Status value={String(d.status)} />
@@ -722,10 +511,10 @@ export function ResearchDetail() {
                       </div>
                     )}
                     <h3 className="email-subject">
-                      {report.email_subject || 'Chưa có tiêu đề'}
+                      {report.email_subject || "Chưa có tiêu đề"}
                     </h3>
                     <div className="preserve email-body">
-                      {report.email_body || 'Chưa có nội dung email.'}
+                      {report.email_body || "Chưa có nội dung email."}
                     </div>
                   </>
                 )}
@@ -741,7 +530,7 @@ export function ResearchDetail() {
               )}
               <details className="panel source-panel">
                 <summary>
-                  Nguồn tham khảo{' '}
+                  Nguồn tham khảo{" "}
                   <span className="muted">({evidence.length})</span>
                 </summary>
                 {evidence.length ? (
@@ -767,9 +556,9 @@ export function ResearchDetail() {
             <section className="panel">
               <h2>Tiến độ nghiên cứu</h2>
               <p className="muted">
-                {run.status === 'failed'
-                  ? 'Chưa tạo được báo cáo. Xem lỗi và tiến độ từng bước bên cạnh.'
-                  : 'Báo cáo và email nháp sẽ xuất hiện sau khi nghiên cứu hoàn tất.'}
+                {run.status === "failed"
+                  ? "Chưa tạo được báo cáo. Xem lỗi và tiến độ từng bước bên cạnh."
+                  : "Báo cáo và email nháp sẽ xuất hiện sau khi nghiên cứu hoàn tất."}
               </p>
             </section>
           )}
@@ -777,14 +566,14 @@ export function ResearchDetail() {
         <div className="detail-sidebar">
           {report && (
             <section id="review" className="panel review-panel">
-              <p className="eyebrow">KIỂM TRA & DUYỆT</p>
+              <p className="eyebrow">GÓI DUYỆT · QUYẾT ĐỊNH CỦA BẠN</p>
               <div className="surface-heading">
                 <h2>Phiên bản {report.version}</h2>
                 {approval && (
                   <Status
                     value={
-                      expired && approval.status === 'pending'
-                        ? 'expired'
+                      expired && approval.status === "pending"
+                        ? "expired"
                         : approval.status
                     }
                   />
@@ -794,12 +583,12 @@ export function ResearchDetail() {
                 Kiểm tra báo cáo, email, người nhận và các tùy chọn bên dưới
                 trước khi duyệt.
               </p>
-              {approval?.status === 'approved' && (
+              {approval?.status === "approved" && (
                 <div className="notice inline-notice" role="status">
                   <strong>
                     {report.send_email
-                      ? 'Đã duyệt yêu cầu gửi email.'
-                      : 'Đã duyệt nội dung; không yêu cầu gửi email từ ứng dụng.'}
+                      ? "Đã duyệt yêu cầu gửi email."
+                      : "Đã duyệt nội dung; không yêu cầu gửi email từ ứng dụng."}
                   </strong>
                   {!report.send_email && (
                     <p>
@@ -815,10 +604,10 @@ export function ResearchDetail() {
                   <dt>Báo cáo & email</dt>
                   <dd>v{report.version}</dd>
                 </div>
-                {(['to', 'cc', 'bcc'] as const).map((key) => (
+                {(["to", "cc", "bcc"] as const).map((key) => (
                   <div key={key}>
                     <dt>{key.toUpperCase()}</dt>
-                    <dd>{(report.recipients[key] ?? []).join(', ') || '—'}</dd>
+                    <dd>{(report.recipients[key] ?? []).join(", ") || "—"}</dd>
                   </div>
                 ))}
                 {report.artifacts.length > 0 && (
@@ -846,11 +635,11 @@ export function ResearchDetail() {
                 )}
                 <div>
                   <dt>Gửi email</dt>
-                  <dd>{report.send_email ? 'Có' : 'Không gửi'}</dd>
+                  <dd>{report.send_email ? "Có" : "Không gửi"}</dd>
                 </div>
                 <div>
                   <dt>Lưu kho tri thức</dt>
-                  <dd>{report.save_kb ? 'Có' : 'Không lưu'}</dd>
+                  <dd>{report.save_kb ? "Có" : "Không lưu"}</dd>
                 </div>
               </dl>
               {Number(run.config.prompt_version ?? 0) < 5 && (
@@ -861,21 +650,21 @@ export function ResearchDetail() {
               )}
               <p className="review-consequence">
                 {report.send_email
-                  ? 'Duyệt sẽ cho phép gửi email này tới người nhận đã chọn.'
-                  : 'Đang tắt gửi email. Duyệt phiên bản này sẽ không gửi email.'}
+                  ? "Duyệt sẽ cho phép gửi email này tới người nhận đã chọn."
+                  : "Đang tắt gửi email. Duyệt phiên bản này sẽ không gửi email."}
               </p>
               {approval && (
                 <>
                   <p className="muted meta">
                     Hết hạn: {dateTime(approval.expires_at)}
                   </p>
-                  {expired && approval.status === 'pending' && (
+                  {expired && approval.status === "pending" && (
                     <p className="inline-notice notice">
                       Quyền duyệt đã hết hạn. Chỉnh sửa và lưu phiên bản mới để
                       yêu cầu duyệt lại.
                     </p>
                   )}
-                  {approval.status === 'pending' && !expired && (
+                  {approval.status === "pending" && !expired && (
                     <div className="actions review-actions">
                       <button
                         disabled={decision.isPending || dirty}
@@ -886,7 +675,7 @@ export function ResearchDetail() {
                           })
                         }
                       >
-                        {decision.isPending ? 'Đang xử lý…' : approvalLabel}
+                        {decision.isPending ? "Đang xử lý…" : approvalLabel}
                       </button>
                       <button
                         className="secondary"
@@ -914,7 +703,13 @@ export function ResearchDetail() {
                   <h3>Kết quả gửi / lưu</h3>
                   {actions.map((action) => (
                     <p key={action.id}>
-                      {action.kind}: <Status value={action.status} />
+                      {(
+                        {
+                          send_email: "Gửi email",
+                          save_kb: "Lưu kho tri thức",
+                        } as Record<string, string>
+                      )[action.kind] ?? action.kind}
+                      : <Status value={action.status} />
                     </p>
                   ))}
                 </div>
@@ -934,13 +729,16 @@ export function ResearchDetail() {
                   <Status
                     value={String(
                       (b.result as Record<string, unknown>)?.status ??
-                        'pending',
+                        "pending",
                     )}
                   />
                 </div>
               ))
             )}
           </section>
+          {report && (
+            <ReportDownloads key={report.id} report={report} runId={run.id} />
+          )}
           {report && (
             <details className="panel quality-panel">
               <summary>Kiểm tra chất lượng</summary>
