@@ -15,7 +15,7 @@ from email_agentic.platform.config import get_settings
 from email_agentic.platform.database import active_claim
 from prometheus_client import start_http_server
 from email_agentic.platform.errors import ProviderFailure
-from email_agentic.platform.telemetry import DURATION, JOBS, configure, tracer
+from email_agentic.platform.telemetry import DURATION, JOBS, configure, job_trace_context, tracer
 from email_agentic.runtime.jobs import enqueue
 from email_agentic.tools.harness import ToolContext
 from email_agentic.workflows.research import make_graph
@@ -80,11 +80,18 @@ class Worker:
             raise ValueError("Unknown job type")
 
     async def process(self, job):
-        token = active_claim.set(job)
-        task = asyncio.create_task(self.handle(job))
-        active_claim.reset(token)
-        heartbeat = asyncio.create_task(self.heartbeat(job, task))
-        with DURATION.labels(job["kind"]).time(), tracer().start_as_current_span("job." + job["kind"]):
+        context, links = job_trace_context(job)
+        with DURATION.labels(job["kind"]).time(), tracer().start_as_current_span(
+            "job." + job["kind"], context=context, links=links,
+            attributes={"job.id": str(job["id"]), "job.kind": job["kind"], "job.attempt": job["attempt"]},
+        ):
+            token = active_claim.set(job)
+            try:
+                # Create inside the span: asyncio tasks copy their creation context.
+                task = asyncio.create_task(self.handle(job))
+            finally:
+                active_claim.reset(token)
+            heartbeat = asyncio.create_task(self.heartbeat(job, task))
             try:
                 await task
                 await self.c.jobs.finish(job)

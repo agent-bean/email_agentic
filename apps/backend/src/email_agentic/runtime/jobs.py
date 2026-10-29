@@ -1,13 +1,14 @@
 import uuid
 from datetime import timedelta
 from psycopg.types.json import Jsonb
+from email_agentic.platform.telemetry import current_trace_parent
 
 
 async def enqueue(connection, owner, kind, entity_id, key):
     await connection.execute(
-        """INSERT INTO jobs(id,owner,kind,entity_id,dedupe_key)
-        VALUES(%s,%s,%s,%s,%s) ON CONFLICT(dedupe_key) DO NOTHING""",
-        (uuid.uuid4(), owner, kind, entity_id, key),
+        """INSERT INTO jobs(id,owner,kind,entity_id,dedupe_key,trace_parent)
+        VALUES(%s,%s,%s,%s,%s,%s) ON CONFLICT(dedupe_key) DO NOTHING""",
+        (uuid.uuid4(), owner, kind, entity_id, key, current_trace_parent()),
     )
 
 
