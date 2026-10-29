@@ -273,22 +273,33 @@ class Google:
         profile = await self.call("gmail", "GET", "gmail/v1/users/me/profile")
         if profile.get("emailAddress", "").casefold() != report["owner"].casefold():
             raise ProviderFailure("gmail", category="mailbox_mismatch")
-        result = await self.call("gmail", "GET", "gmail/v1/users/me/messages", params={
-            "q": f"in:sent rfc822msgid:{report['correlation_id'].strip('<>')}", "maxResults": 2})
-        matches = list({item["id"]: item for item in result.get("messages", [])}.values())
-        if len(matches) != 1 or result.get("nextPageToken"):
-            return {"verification": "multiple_matches" if matches else "not_found", "provider_id": None}
-        message = await self.call("gmail", "GET", f"gmail/v1/users/me/messages/{matches[0]['id']}",
-                                  params={"format": "raw"})
-        provider_id = message.get("id", matches[0]["id"])
+        receipt_id = report.get("provider_id")
+        if receipt_id:
+            message_id = receipt_id
+        else:
+            result = await self.call("gmail", "GET", "gmail/v1/users/me/messages", params={
+                "q": f"in:sent rfc822msgid:{report['correlation_id'].strip('<>')}", "maxResults": 2})
+            matches = list({item["id"]: item for item in result.get("messages", [])}.values())
+            if len(matches) != 1 or result.get("nextPageToken"):
+                return {"verification": "multiple_matches" if matches else "not_found", "provider_id": None}
+            message_id = matches[0]["id"]
+        try:
+            message = await self.call("gmail", "GET", f"gmail/v1/users/me/messages/{message_id}",
+                                      params={"format": "raw"})
+        except ProviderFailure as exc:
+            if exc.category == "http_404":
+                return {"verification": "not_found", "provider_id": None}
+            raise
+        provider_id = message.get("id")
         if message.get("sizeEstimate", 0) > 25 * 1024 * 1024:
             return {"verification": "too_large", "provider_id": provider_id}
         try:
             raw = base64.urlsafe_b64decode(message["raw"] + "===")
             mime = BytesParser(policy=policy.default).parsebytes(raw)
             verified = ("SENT" in message.get("labelIds", [])
-                        and str(mime.get("Message-ID", "")) == report["correlation_id"]
-                        and (not report.get("provider_id") or report["provider_id"] == provider_id)
+                        and provider_id == message_id
+                        # Gmail may replace Message-ID; a stored receipt identifies the exact sent message.
+                        and (bool(receipt_id) or str(mime.get("Message-ID", "")) == report["correlation_id"])
                         and self.draft_matches(report, {"message": message if report.get("source_message") else
                                                 {**message, "threadId": None}}))
         except (KeyError, ValueError, TypeError):

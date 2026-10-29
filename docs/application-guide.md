@@ -116,7 +116,7 @@ Request LLM dùng ngân sách cấu hình tại [LLM integration](../apps/backen
 
 Cleanup giữ nguồn/research 30 ngày, report và file 90 ngày; KB đã duyệt giữ đến khi xóa. Dữ liệu đang chờ duyệt, đang xử lý hoặc gửi chưa rõ kết quả được giữ để đối chiếu. Report hết hạn nguồn chỉ còn đọc/tải; hết 90 ngày không còn nội dung/file. Gmail/Calendar trên Google không bị xóa. Backup VPS và retention có script/systemd timer; xem [vận hành VPS](vps-release-guide.md#backup-và-rollback).
 
-Trang **Đối chiếu Sent** liệt kê tối đa 100 yêu cầu gửi của owner và email đúng phiên bản đã duyệt. Bấm đối chiếu để đọc Gmail thật: kiểm mailbox, SENT, correlation/receipt, thread, người nhận, nội dung và attachment. Không tìm thấy không chứng minh chưa gửi; thao tác chỉ đọc, không cập nhật receipt hoặc gửi lại. Nội dung/provenance hết hạn trả trạng thái không thể đối chiếu.
+Trang **Đối chiếu Sent** liệt kê tối đa 100 yêu cầu gửi của owner và email đúng phiên bản đã duyệt. Bấm đối chiếu để đọc Gmail thật: kiểm mailbox rồi đọc trực tiếp message ID trong receipt nếu đã có; Gmail có thể thay Message-ID khi gửi. Khi chưa có receipt, chỉ tìm bằng correlation và yêu cầu Message-ID khớp duy nhất. Cả hai đường đều kiểm SENT, message ID trả về, thread, người nhận, nội dung và attachment. Không tìm thấy không chứng minh chưa gửi; thao tác chỉ đọc, không cập nhật receipt hoặc gửi lại. Nội dung/provenance hết hạn trả trạng thái không thể đối chiếu.
 
 API lưu W3C trace parent vào job; worker khôi phục context trước khi tạo task để model/tool là span con. Resume sau chờ có trace mới liên kết trigger, tra theo run ID. Không đưa email, prompt, token hoặc baggage vào trace. Metrics và trace dùng hạ tầng monitoring hiện có.
 
