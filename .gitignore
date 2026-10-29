@@ -11,6 +11,8 @@
 config/cloudflared.yml
 docs/deployment-guide.md
 docs/references/source-catalog.md
+docs/07_private-operations.md
+docs/references/02_private-source-catalog.md
 plans/
 
 # Local tooling and Python artifacts
