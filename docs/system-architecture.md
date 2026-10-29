@@ -21,7 +21,7 @@ flowchart TB
     A --> T["Tools và harness sáu gate"]
     R --> T
     T --> B
-    T --> I["Integrations: Gmail, Calendar, Tavily"]
+    T --> I["Integrations: Gmail, Calendar, Tavily, DuckDuckGo, Firecrawl"]
     A --> L["LLM adapter → gateway"]
     B --> DB
     B --> F["Kho tệp riêng tư trên VPS"]
@@ -56,7 +56,7 @@ apps/
         ├── agents/                Bảy vai trò, prompt, schema đầu ra
         ├── tools/                 Registry, harness, schema và handler
         ├── domains/               Quy tắc và dữ liệu theo nghiệp vụ
-        ├── integrations/          Client Gmail, Calendar, Tavily, LLM
+        ├── integrations/          Client Google, Tavily, DuckDuckGo, Firecrawl, LLM
         ├── runtime/               Jobs, lịch quét, lease, retry, resume
         └── platform/              Config, DB pool, tệp, auth, telemetry
 infra/                             Compose, monitoring, cấu hình deploy
@@ -213,6 +213,6 @@ Còn phải kiểm chứng khi triển khai: tương thích package/gateway, ren
 
 Source đã có React, API/worker, migration có backup, queue PostgreSQL, checkpoint LangGraph, bảy vai trò và tool harness. Luồng tạo nghiên cứu thủ công → xác nhận domain → thu thập thật → nháp → sửa/duyệt → outbox email/KB đã được nối trong source. Đã đọc Google/Tavily thật; bước tạo báo cáo dài chưa qua kiểm chứng gateway (timeout hoặc response chưa đạt schema). Chưa xác nhận toàn bộ luồng thực chạy thành công. Compose có Prometheus, Tempo, Grafana; chưa triển khai VPS.
 
-Chưa coi là hoàn tất PRD: nhận diện/tự kích hoạt nghiên cứu từ email/lịch, Gmail history cursor, phân tích PDF, xuất PDF/Word và attachment bất biến, đối chiếu Sent trên UI, cleanup/retention và backup định kỳ. Luồng web hiện dùng hai truy vấn web cố định, luôn yêu cầu xác nhận danh tính. Đo thời gian hiện gồm cả lúc chờ xác nhận nên chưa dùng để chứng minh mục tiêu 42 giây. Trace hiện ở API/job/tool, chưa nối đầy đủ ngữ cảnh xuyên tiến trình.
+Chưa coi là hoàn tất PRD: nhận diện/tự kích hoạt nghiên cứu từ email/lịch, Gmail history cursor, phân tích PDF, xuất PDF/Word và attachment bất biến, đối chiếu Sent trên UI, cleanup/retention và backup định kỳ. Luồng web dùng năm chủ đề cố định qua Tavily và DuckDuckGo; cấu hình/giới hạn hiện tại xem [hướng dẫn ứng dụng](application-guide.md). Luôn yêu cầu xác nhận danh tính. Đo thời gian hiện gồm cả lúc chờ xác nhận nên chưa dùng để chứng minh mục tiêu 42 giây. Trace hiện ở API/job/tool, chưa nối đầy đủ ngữ cảnh xuyên tiến trình.
 
 [Evals](evaluation-guide.md) nằm ngoài runtime: cases/fixture là đầu vào; golden riêng tư phải có người review và khóa trước chấm. Runner hiện hỗ trợ xuất/chấm lượt live; replay provider frozen còn phải triển khai. Không dùng kết quả live làm bằng chứng hồi quy frozen.

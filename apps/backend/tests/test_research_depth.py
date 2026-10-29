@@ -35,7 +35,8 @@ async def test_search_keeps_partial_results_limits_concurrency_and_excludes_priv
     assert tools.peak == 3
     assert len([item for item in result if item["results"]]) == 4
     assert result[-1] == {
-        "research_area": "news", "status": "failed", "error_code": "rate_limit", "results": []
+        "research_area": "news", "provider": "tavily", "status": "failed",
+        "error_code": "rate_limit", "results": []
     }
 
 
@@ -44,7 +45,7 @@ async def test_all_search_failures_stop_the_web_branch():
         async def execute(self, *args):
             raise ProviderFailure("tavily", category="network_or_timeout")
 
-    with pytest.raises(ProviderFailure, match="tavily"):
+    with pytest.raises(ProviderFailure, match="web_search"):
         await WebResearchAgent(UnavailableTools()).run(
             {"company_name": "Company", "domain": "example.com"}, None
         )

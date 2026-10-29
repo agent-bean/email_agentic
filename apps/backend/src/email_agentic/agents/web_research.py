@@ -5,9 +5,10 @@ from email_agentic.platform.errors import ProviderFailure, ToolDenied
 
 
 class WebResearchAgent:
-    def __init__(self, tools, read_pages=0):
+    def __init__(self, tools, read_pages=0, duckduckgo_enabled=False):
         self.tools = tools
         self.read_pages = read_pages
+        self.providers = ("tavily", "duckduckgo") if duckduckgo_enabled else ("tavily",)
 
     async def run(self, run, context):
         company = f'"{run["company_name"]}"'
@@ -23,24 +24,27 @@ class WebResearchAgent:
         # Leave capacity for the calendar request in the parallel collection branch.
         slots = asyncio.Semaphore(3)
 
-        async def search(area, query, news):
+        async def search(area, query, news, provider):
             async with slots:
                 try:
                     response = await self.tools.execute(
-                        "web.search", {"query": query, "news": news}, context
+                        "web.search", {"query": query, "news": news, "provider": provider}, context
                     )
                 except ProviderFailure as exc:
                     return {
                         "research_area": area,
+                        "provider": provider,
                         "status": "failed",
                         "error_code": exc.category,
                         "results": [],
                     }
-                return {**response, "research_area": area, "status": "succeeded"}
+                return {**response, "research_area": area, "provider": provider, "status": "succeeded"}
 
-        responses = await asyncio.gather(*(search(*query) for query in queries))
+        responses = await asyncio.gather(*(
+            search(*query, provider) for query in queries for provider in self.providers
+        ))
         if all(response["status"] == "failed" for response in responses):
-            raise ProviderFailure("tavily", category="all_searches_failed")
+            raise ProviderFailure("web_search", category="all_searches_failed")
         await self.read_sources(responses, context)
         return responses
 

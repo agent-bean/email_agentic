@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from uuid import UUID
+from typing import Literal
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
@@ -13,6 +14,7 @@ from email_agentic.domains.reports.service import Reports
 from email_agentic.domains.research.service import ResearchService
 from email_agentic.integrations.google import Google
 from email_agentic.integrations.firecrawl import Firecrawl
+from email_agentic.integrations.duckduckgo import DuckDuckGo
 from email_agentic.integrations.llm import LLM
 from email_agentic.integrations.tavily import Tavily
 from email_agentic.platform.database import Database
@@ -32,6 +34,7 @@ class Domain(Empty):
 class Search(Empty):
     query: str = Field(min_length=2, max_length=1000)
     news: bool = False
+    provider: Literal["tavily", "duckduckgo"] = "tavily"
 
 
 class CalendarWindow(Empty):
@@ -74,6 +77,7 @@ async def build_container(settings):
         knowledge = Knowledge(db)
         google = Google(client, settings)
         tavily = Tavily(client, settings.tavily_api_key.get_secret_value())
+        duckduckgo = DuckDuckGo(settings.duckduckgo_enabled)
         firecrawl = Firecrawl(client, settings.firecrawl_api_key.get_secret_value())
         publication = Publication(db, knowledge)
         tools = ToolExecutor(db, settings.tool_limit_per_minute)
@@ -88,7 +92,8 @@ async def build_container(settings):
             return await google.calendar(request.start, request.end)
 
         async def search(request, context):
-            return await tavily.search(request.query, request.news)
+            provider = duckduckgo if request.provider == "duckduckgo" else tavily
+            return await provider.search(request.query, request.news)
 
         async def scrape(request, context):
             return await firecrawl.scrape(request.url, request.timeout_seconds)

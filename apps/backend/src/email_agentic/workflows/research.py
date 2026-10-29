@@ -85,6 +85,8 @@ def make_graph(container, checkpointer):
                 c.tools,
                 run["config"].get("firecrawl_max_pages", 0)
                 if c.settings.firecrawl_api_key.get_secret_value() else 0,
+                duckduckgo_enabled=run["config"].get("duckduckgo_enabled", False)
+                and c.settings.duckduckgo_enabled,
             ), "web:read"),
         ]
 
@@ -170,6 +172,13 @@ def make_graph(container, checkpointer):
                 response["research_area"]
                 for branch in branches
                 if branch["branch"] == "web"
+                for response in (branch["result"].get("data") or [])
+                if response.get("status") == "failed"
+            ],
+            "search_provider_failures": [
+                {"provider": response.get("provider", "tavily"),
+                 "area": response["research_area"], "error_code": response.get("error_code")}
+                for branch in branches if branch["branch"] == "web"
                 for response in (branch["result"].get("data") or [])
                 if response.get("status") == "failed"
             ],

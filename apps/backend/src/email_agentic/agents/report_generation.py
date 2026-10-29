@@ -70,7 +70,7 @@ Research depth requirements:
   questions/next step and evidence gaps. Prefer concrete details over generic adjectives or source-count padding.
 Research coverage lists collection successes/failures; success does not guarantee relevant or complete evidence.
 Page-reading coverage identifies pages read with Firecrawl, pages that failed and pages not selected.
-Failed or unselected pages use Tavily excerpts; even successful pages are bounded excerpts, not a guarantee
+Failed or unselected pages use search-provider excerpts (Tavily or DuckDuckGo); even successful pages are bounded excerpts, not a guarantee
 that the full document was supplied. Do not describe failed page reads as fully verified content.
 Disclose material collection failures, empty or irrelevant topics, and excerpt limitations. A missing search result
 does not prove that a product, partner or event does not exist. Keep email_body concise, about 80–140 Vietnamese words,
@@ -103,6 +103,7 @@ class ReportGenerationAgent:
                 "research_coverage": [
                     {
                         "area": response.get("research_area", "general"),
+                        "provider": response.get("provider", "tavily"),
                         "status": response.get("status", "succeeded"),
                         "error_code": response.get("error_code"),
                         "urls": [entry.get("url") for entry in response.get("results", [])],

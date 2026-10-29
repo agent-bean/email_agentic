@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     llm_api_key: SecretStr = SecretStr("")
     llm_model: str = ""
     tavily_api_key: SecretStr = SecretStr("")
+    duckduckgo_enabled: bool = True
     firecrawl_api_key: SecretStr = SecretStr("")
     firecrawl_max_pages: int = Field(12, ge=0, le=30)
     google_oauth_token_file: Path = Path(".secrets/google/token.json")
