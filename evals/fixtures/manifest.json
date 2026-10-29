@@ -1,8 +1,10 @@
 {
-  "version": 1,
-  "status": "requires_binding",
+  "version": 2,
+  "status": "case_sources_bound",
   "google_manifest": ".runtime/google-demo/manifest.json",
   "local_bindings": "evals/fixtures/private/bindings.json",
-  "synthetic": true,
-  "notes": "Bind existing seeded provider IDs; do not seed again. Local bindings are private and absent from a fresh clone. Cross-check source and case references with original provider records; Gmail may rewrite Message-ID. This manifest contains no golden answers."
+  "notes": "Case wording comes from assignment slide 5; previously accepted URL corrections are retained. Gmail bindings are transport history, not case authority. Calendar/PDF additions are separate execution supplements. No golden answers enter runtime.",
+  "dataset_version": "2",
+  "case_inputs": "evals/fixtures/private/case-inputs.json",
+  "case_source_authority": "email_assistant.pptx slide 5"
 }

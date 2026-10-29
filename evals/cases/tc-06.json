@@ -1,12 +1,12 @@
 {
   "case_id": "TC-06",
-  "dataset_version": "1",
+  "dataset_version": "2",
   "input": {
     "company_name": "Bosch Global Software Technologies Vietnam",
     "domain": "bosch-softwaretechnologies.com",
     "context": "AI Automation, sản phẩm, đối tác; lưu KB sau duyệt."
   },
-  "fixture_status": "requires_fixture_binding",
+  "fixture_status": "requires_case_source",
   "golden_status": "not_reviewed",
   "source_mode": "live",
   "required_checks": [

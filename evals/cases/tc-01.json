@@ -1,12 +1,12 @@
 {
   "case_id": "TC-01",
-  "dataset_version": "1",
+  "dataset_version": "2",
   "input": {
     "company_name": "FPT Software",
     "domain": "fptsoftware.com",
     "context": "Quan tâm giải pháp AI doanh nghiệp."
   },
-  "fixture_status": "requires_fixture_binding",
+  "fixture_status": "requires_case_source",
   "golden_status": "not_reviewed",
   "source_mode": "live",
   "required_checks": [

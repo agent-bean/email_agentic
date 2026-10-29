@@ -1,12 +1,12 @@
 {
   "case_id": "TC-03",
-  "dataset_version": "1",
+  "dataset_version": "2",
   "input": {
     "company_name": "Samsung Electronics Việt Nam SEV Bắc Ninh",
     "domain": "samsung.com",
     "context": "Chuẩn bị họp giới thiệu giải pháp; không gộp SEVT/Samsung Vina."
   },
-  "fixture_status": "requires_fixture_binding",
+  "fixture_status": "requires_case_source",
   "golden_status": "not_reviewed",
   "source_mode": "live",
   "required_checks": [

@@ -1,12 +1,12 @@
 {
   "case_id": "TC-04",
-  "dataset_version": "1",
+  "dataset_version": "2",
   "input": {
     "company_name": "Shopee Vietnam",
     "domain": "shopee.vn",
     "context": "Quan tâm OCR và hồ sơ khách hàng."
   },
-  "fixture_status": "requires_fixture_binding",
+  "fixture_status": "requires_case_source",
   "golden_status": "not_reviewed",
   "source_mode": "live",
   "required_checks": [

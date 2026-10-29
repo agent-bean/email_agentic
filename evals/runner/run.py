@@ -29,6 +29,8 @@ def main():
     args = parser.parse_args()
     golden, sha = load_locked(args.golden)
     case = json.loads(args.case.read_text())
+    if case.get("fixture_status") in {"requires_fixture_binding", "requires_case_source"}:
+        raise SystemExit("Use the effective *-input.json exported by the collector to score bound cases")
     if (
         case["case_id"],
         case["dataset_version"],

@@ -1,12 +1,12 @@
 {
   "case_id": "TC-02",
-  "dataset_version": "1",
+  "dataset_version": "2",
   "input": {
     "company_name": "Vinamilk",
     "domain": "vinamilk.com.vn",
     "context": "Trao đổi AI trong quản lý tài liệu."
   },
-  "fixture_status": "requires_fixture_binding",
+  "fixture_status": "requires_case_source",
   "golden_status": "not_reviewed",
   "source_mode": "live",
   "required_checks": [
