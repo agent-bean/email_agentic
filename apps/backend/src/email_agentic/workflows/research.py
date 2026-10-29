@@ -157,18 +157,21 @@ def make_graph(container, checkpointer):
                 "SELECT result FROM branch_results WHERE run_id=%s AND branch=%s", (run["id"], name)
             )
             if existing and existing["result"]["status"] == "succeeded":
-                return
-            context = ToolContext(run["owner"], name, frozenset({scope}), str(run["id"]))
-            try:
-                data = await agent.run(run, context)
-                result = {
-                    "role": name,
-                    "status": "succeeded",
-                    "data": json.loads(json.dumps(data, default=str)),
-                }
-            except Exception as exc:
-                result = {"role": name, "status": "failed", "error_code": type(exc).__name__}
-            await c.jobs.save_branch(run["id"], name, result)
+                result = existing["result"]
+            else:
+                context = ToolContext(run["owner"], name, frozenset({scope}), str(run["id"]))
+                try:
+                    data = await agent.run(run, context)
+                    result = {
+                        "role": name,
+                        "status": "succeeded",
+                        "data": json.loads(json.dumps(data, default=str)),
+                    }
+                except Exception as exc:
+                    result = {"role": name, "status": "failed", "error_code": type(exc).__name__}
+                await c.jobs.save_branch(run["id"], name, result)
+            # A previous worker may have stopped between saving the result and its evidence.
+            # Replaying cached evidence is idempotent and does not repeat provider calls.
             if name == "web" and result["status"] == "succeeded":
                 for response in result["data"]:
                     for item in response.get("results", []):
@@ -201,6 +204,7 @@ def make_graph(container, checkpointer):
         await c.research.validate_meeting(run)
         existing = await c.db.one("SELECT id FROM reports WHERE run_id=%s LIMIT 1", (run["id"],))
         if existing:
+            await c.research.status(run["id"], "draft_ready")
             return {}
         evidence = await c.db.all(
             "SELECT id,url,title,content,published_at FROM evidence WHERE run_id=%s", (run["id"],)
@@ -220,6 +224,11 @@ def make_graph(container, checkpointer):
         if unknown:
             raise Conflict("Report contains an unsupported source URL")
         elapsed = (run["elapsed_seconds"] or 0) + time.monotonic() - node_started.get()
+        web_responses = []
+        for branch in branches:
+            if branch["branch"] == "web":
+                web_responses.extend(branch["result"].get("data") or [])
+        failed_searches = [response for response in web_responses if response.get("status") == "failed"]
         quality = {
             "cited_sources": len(cited & known),
             "citation_correction_attempted": correction_attempted,
@@ -233,25 +242,16 @@ def make_graph(container, checkpointer):
             "completeness": "not_evaluated",
             "readiness": "requires_review",
             "branch_failures": [x["branch"] for x in branches if x["result"]["status"] == "failed"],
-            "search_failures": [
-                response["research_area"]
-                for branch in branches
-                if branch["branch"] == "web"
-                for response in (branch["result"].get("data") or [])
-                if response.get("status") == "failed"
-            ],
+            "search_failures": [response["research_area"] for response in failed_searches],
             "search_provider_failures": [
                 {"provider": response.get("provider", "tavily"),
                  "area": response["research_area"], "error_code": response.get("error_code")}
-                for branch in branches if branch["branch"] == "web"
-                for response in (branch["result"].get("data") or [])
-                if response.get("status") == "failed"
+                for response in failed_searches
             ],
             "page_reads": {
                 status: len({
                     canonical_url(item["url"])
-                    for branch in branches if branch["branch"] == "web"
-                    for response in (branch["result"].get("data") or [])
+                    for response in web_responses
                     for item in response.get("results", [])
                     if item.get("page_read", {}).get("status") == status
                 })

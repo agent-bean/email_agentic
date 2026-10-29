@@ -76,3 +76,70 @@ def test_malformed_source_url_is_rejected_without_crashing_validation():
 ])
 def test_source_validation_covers_bare_and_markdown_links_with_balanced_url_parentheses(text):
     assert cited_urls(text) == {"https://example.com/entry_(detail)"}
+
+
+@pytest.mark.parametrize("saved_evidence", [0, 1])
+async def test_retry_restores_cached_web_evidence_without_repeating_searches(db, saved_evidence):
+    class ReportLLM:
+        async def structured(self, run_id, schema, system, payload):
+            assert set(json.loads(payload)["allowed_urls"]) == {
+                "https://example.com/first", "https://example.com/second",
+            }
+            return Draft(markdown="Fact [source](https://example.com/second)",
+                         email_subject="Discussion", email_body="Thank you.")
+
+    settings = Settings(APP_ENV="test", DATABASE_URL=db.pool.conninfo, _env_file=None)
+    async with build_container(settings) as c:
+        owner = f"{uuid.uuid4()}@example.invalid"
+        run_id = await c.research.create(
+            owner, ResearchRequest(company_name="Company", domain="example.com"), str(uuid.uuid4()),
+        )
+        await db.execute("UPDATE research_runs SET identity_confirmed=true WHERE id=%s", (run_id,))
+        for branch in ("company", "memory", "calendar"):
+            await c.jobs.save_branch(run_id, branch, {"status": "succeeded", "data": []})
+        results = [{"url": f"https://example.com/{name}", "title": name, "content": "Fact"}
+                   for name in ("first", "second")]
+        await c.jobs.save_branch(run_id, "web", {
+            "status": "succeeded", "data": [{"research_area": "identity", "results": results}],
+        })
+        for item in results[:saved_evidence]:
+            await db.execute("INSERT INTO evidence(id,run_id,url,title,content) VALUES(%s,%s,%s,%s,%s)",
+                             (uuid.uuid4(), run_id, item["url"], item["title"], item["content"]))
+
+        async def unexpected_provider_call(*args, **kwargs):
+            pytest.fail("Successful cached branches must not repeat provider calls")
+
+        c.tools.execute = unexpected_provider_call
+        c.llm = ReportLLM()
+        await make_graph(c, None).ainvoke({"run_id": str(run_id)})
+
+        assert len(await db.all("SELECT id FROM evidence WHERE run_id=%s", (run_id,))) == 2
+        assert (await c.research.get(owner, run_id))["status"] == "draft_ready"
+
+
+async def test_retry_restores_readiness_without_replacing_committed_report(db):
+    settings = Settings(APP_ENV="test", DATABASE_URL=db.pool.conninfo, _env_file=None)
+    async with build_container(settings) as c:
+        owner = f"{uuid.uuid4()}@example.invalid"
+        run_id = await c.research.create(
+            owner, ResearchRequest(company_name="Company", domain="example.com"), str(uuid.uuid4()),
+        )
+        await db.execute("UPDATE research_runs SET identity_confirmed=true WHERE id=%s", (run_id,))
+        for branch in ("company", "memory", "calendar", "web"):
+            await c.jobs.save_branch(run_id, branch, {"status": "succeeded", "data": []})
+        run = await c.research.get(owner, run_id)
+        report_id = await c.reports.initial(
+            run, Draft(markdown="Saved report", email_subject="Discussion", email_body="Saved reply"),
+            {"markdown_ready_at": "2026-10-29T00:00:00+00:00"},
+        )
+        before = await c.reports.latest(owner, run_id)
+
+        result = await make_graph(c, None).ainvoke({"run_id": str(run_id)})
+
+        assert "__interrupt__" in result
+        assert (await c.research.get(owner, run_id))["status"] == "draft_ready"
+        assert await c.reports.latest(owner, run_id) == before
+        approvals = await db.all("SELECT status FROM approvals WHERE report_id=%s", (report_id,))
+        assert approvals == [{"status": "pending"}]
+        assert not await db.all("SELECT id FROM publication_actions WHERE approval_id IN "
+                                "(SELECT id FROM approvals WHERE report_id=%s)", (report_id,))
