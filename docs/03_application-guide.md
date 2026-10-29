@@ -12,6 +12,8 @@ Không khởi worker local với cùng hộp thư và bản sao DB production: h
 
 Dùng `make test`, `make lint`, `make web-build` phù hợp thay đổi; test dùng DB riêng và cần image/PostgreSQL local. `make status` kiểm tiến trình, `make down` dừng stack và giữ volume. Chỉ dừng tiến trình mình đã khởi hoặc được giao quản lý.
 
+Các lệnh chọn unit/integration/E2E, module, browser test và quy trình PR nằm trong [quy ước đóng góp](08_contributing-and-quality.md). Trang tổng quan hỗ trợ tìm tên/domain và lọc trạng thái; bộ lọc được giữ trong URL. Mỗi nghiên cứu có tiến trình và hành động tiếp theo; báo cáo nội bộ, email khách hàng và gói duyệt là các phần riêng.
+
 ## Hành trình sử dụng
 
 1. Từ **Email & cuộc họp**, đồng bộ rồi chọn nguồn cần nghiên cứu. Với nhập tay, giữ nguyên email khách ở **Email gốc**, tách hướng dẫn vào **Yêu cầu nghiên cứu**. Khi nguồn không tải được, dùng **Tải lại nguồn**.
@@ -29,6 +31,7 @@ Automation mới cần cutoff để tránh xử lý hàng loạt thư cũ. Cấu
 | --- | --- |
 | Giao diện, điều hướng | [Web app](../apps/web/src/app/app.tsx), [features](../apps/web/src/features/) |
 | HTTP và quyền | [API](../apps/backend/src/email_agentic/api/routes.py), [auth](../apps/backend/src/email_agentic/platform/auth.py) |
+| Model và schema dùng chung | [Models](../apps/backend/src/email_agentic/models/): research, reports, API, agents và tools |
 | Khởi tạo, xử lý job | [Bootstrap](../apps/backend/src/email_agentic/bootstrap.py), [worker](../apps/backend/src/email_agentic/worker.py) |
 | Nghiên cứu, nội dung | [Workflow](../apps/backend/src/email_agentic/workflows/research.py), [agents](../apps/backend/src/email_agentic/agents/) |
 | Dữ liệu, quy tắc | [Domains](../apps/backend/src/email_agentic/domains/), [migrations](../apps/backend/migrations/) |

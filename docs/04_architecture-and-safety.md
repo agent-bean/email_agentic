@@ -10,6 +10,8 @@ Luồng do code điều phối giúp kiểm soát thứ tự, deadline và đi�
 
 [Domains](../apps/backend/src/email_agentic/domains/) sở hữu giao dịch/quy tắc; agents hiểu/tổng hợp nội dung; tools sở hữu thao tác có quyền; integrations nối provider. Chỉ owner nghiệp vụ sửa dữ liệu của mình. Memory/KB bắt đầu bằng truy xuất PostgreSQL; chưa chọn vector DB/GraphRAG chỉ vì giáo trình có ví dụ. KB đã duyệt khác memory nháp, không tạo kho chuẩn thứ hai trong LangGraph Store.
 
+[Models](../apps/backend/src/email_agentic/models/) sở hữu các hợp đồng Pydantic dùng chung: đầu vào nghiên cứu, gói báo cáo, API response, output agent và tool arguments. API/domain/agent nhập các model này; những đường import cũ được giữ làm compatibility exports. Model không thực thi I/O hoặc thay thế quy tắc giao dịch của domain. Persistence vẫn dùng SQL/migrations có tham số; không thêm ORM chỉ để có lớp models.
+
 ## Danh tính, nguồn và nội dung
 
 Không gộp pháp nhân theo tên hiển thị, email cá nhân hoặc quan hệ mẹ/con. Xác nhận doanh nghiệp khác duyệt phát hành. Email/lịch/PDF/web là dữ liệu không đáng tin, không tự cấp quyền hoặc ghi đè instruction. Agent chỉ nhận ngữ cảnh cần thiết; không lưu chain-of-thought hay đưa secret vào prompt, checkpoint, audit/telemetry.

@@ -10,6 +10,7 @@
 
 - [Đánh giá chất lượng](05_evaluation-guide.md): input, golden, review, hồi quy và nghiệm thu.
 - [Release và vận hành](06_release-and-operations.md): CI, triển khai, backup, retention và rollback.
+- [Đóng góp và chất lượng](08_contributing-and-quality.md): nhánh/PR, convention, các lớp test và bảo vệ `main`.
 - Hướng dẫn riêng tại `docs/07_private-operations.md`: đường truy cập, cấu hình và quyền vận hành; chỉ có trên máy quản trị, ngoài Git.
 - [Tham khảo giáo trình](references/01_supporting-knowledge.md): giới hạn khi tái sử dụng tài liệu/code mẫu; không cần đọc để chạy ứng dụng.
 - Danh mục riêng tại `docs/references/02_private-source-catalog.md`: đường tìm tài liệu gốc trên máy quản trị, ngoài Git.

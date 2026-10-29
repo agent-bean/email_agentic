@@ -49,7 +49,11 @@ Log deploy tự động nằm ở `/var/log/email-agentic-deploy/<commit>.log`, 
 
 [CI/CD workflow](../.github/workflows/ci-cd.yml) sở hữu trigger, kiểm tra và điều kiện deploy; manifests/lockfiles sở hữu dependency. Kiểm tra chạy với DB riêng, không dùng Google, golden, credential hay dữ liệu production. Pass CI không thay nghiệm thu tích hợp hoặc chất lượng PRD.
 
+Mọi thay đổi đi từ nhánh công việc qua PR và check `verify`, rồi squash merge vào `main`; xem [quy ước đóng góp và chất lượng](08_contributing-and-quality.md). Verify kiểm convention PR, lint/build, test unit/integration/E2E backend và web, script vận hành, container build, migration trên DB riêng và release packaging. DB thiếu phải fail các lớp bắt buộc. Browser E2E chạy API và PostgreSQL test thật; không cấp secret production cho PR.
+
 Deploy chỉ sau verify trên nhánh/environment được workflow cho phép. Pull request không nhận secrets triển khai. Không hủy deployment đang chạy; khóa VPS và kiểm commit HEAD tránh cutover đè bởi phiên cũ. Cơ chế chính xác thuộc script/workflow.
+
+Deploy và retention cùng giữ `/run/lock/email-agentic-deploy.lock` trước khi chọn release/dừng worker; tác vụ còn lại từ chối chạy khi khóa đang giữ. Khi nâng cấp từ bản dùng hai khóa riêng, quản trị viên dừng lịch retention, chờ tác vụ hiện tại kết thúc, cài lại entry point deploy root-owned theo phần dưới và cập nhật script retention đã review trước khi bật lại lịch. Thay source trong repo chưa tự cập nhật entry point đã cài trên VPS.
 
 ## Quyền triển khai
 
