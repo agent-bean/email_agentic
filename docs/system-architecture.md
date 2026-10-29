@@ -185,7 +185,7 @@ HTTP API phiên bản `/api/v1`, schema Pydantic/OpenAPI làm hợp đồng chu�
 
 Báo cáo có Markdown và nguồn; body email là tóm tắt ngắn nhưng giữ cảnh báo nghiệp vụ. Renderer dùng cùng phiên bản nội dung để tạo HTML xem trước, PDF và DOCX. Đề xuất WeasyPrint với template/CSS/font kiểm soát cho PDF, python-docx cho Word; cần kiểm chứng tiếng Việt, bảng, citation và dependency native trong image. Không coi mọi định dạng giữ layout giống hệt nhau.
 
-PDF đầu vào trích text theo trang bằng pypdf rồi phân tích với LLM, giữ page provenance. Tệp scan, mã hóa hoặc lỗi trích xuất phải được phát hiện và hiện phần chưa phân tích; không gọi text extractor là OCR hoặc giả vờ đọc được nội dung. OCR/vision bổ sung chỉ khi case yêu cầu, không mặc định thêm một agent/server.
+PDF đầu vào trích text theo trang bằng pypdf rồi phân tích với LLM, giữ page provenance. Trang scan không có lớp text được OCR offline bằng Poppler/Tesseract trong process giới hạn, không thêm agent/server. Phương pháp và kết quả giữ theo trang; trang có text không OCR ảnh chen giữa. Tệp mã hóa, lỗi hoặc bị giới hạn phải hiện phần chưa phân tích. OCR không xác minh dữ kiện và có sai số cần review.
 
 Kho tệp là volume riêng tư, tên do ứng dụng sinh, metadata/hash trong DB. Ghi tệp tạm rồi atomic rename, sau đó ghi manifest DB; có kiểm tra/dọn orphan, không giả định DB và filesystem là một transaction. API kiểm owner khi tải/xem tệp; không public toàn bộ volume. Chỉ dữ liệu cần thiết được đưa vào model, không gửi token hoặc đường dẫn secret.
 
@@ -195,7 +195,7 @@ Cloudflare Access bảo vệ app/Grafana; connector và API kiểm JWT đúng ch
 
 Nguồn email/web/PDF là dữ liệu không đáng tin. Tool chỉ nhận tài nguyên được cấp quyền; URL fetch chặn mạng nội bộ/metadata, kiểm redirect/DNS và giới hạn response. Renderer không nhận HTML/CSS tùy ý, không tự tải tài nguyên mạng hoặc đường dẫn file từ nội dung model. Parse/export chạy với quyền hạn chế. Không cần agent bảo mật thứ tám.
 
-OpenTelemetry nối trace API → job → graph → agent → model/tool; resume sau chờ dùng trace mới có liên kết run/trace trước thay vì giữ span mở 24 giờ. Prometheus cho chỉ số vận hành, Tempo cho trace, Grafana cho dashboard port riêng. Cost/usage theo từng run lưu trong DB để không lệ thuộc telemetry; giá chưa biết ghi chưa xác định. Metric không dùng run ID/email/URL làm label có quá nhiều giá trị. Audit quyết định nghiệp vụ khác trace quan sát và không bị sampling bỏ mất.
+OpenTelemetry lưu W3C traceparent vào queue và khôi phục trước khi worker tạo task, nối span API/job, bước nghiên cứu và model/tool. Resume sau chờ tạo trace mới có link đến trigger, tra các bước theo run ID thay vì giữ span mở 24 giờ. Chỉ lưu IDs, không baggage/tracestate hoặc payload riêng tư. Prometheus cho chỉ số vận hành, Tempo cho trace, Grafana cho dashboard port riêng. Cost/usage theo từng run lưu trong DB để không lệ thuộc telemetry; giá chưa biết ghi chưa xác định. Metric không dùng run ID/email/URL làm label có quá nhiều giá trị. Audit quyết định nghiệp vụ khác trace quan sát và không bị sampling bỏ mất.
 
 Giữ telemetry đã làm sạch 30 ngày; raw email/attachment/research 30 ngày, report/history 90 ngày, KB đến khi xóa/reset theo PRD. Tệp đính kèm gói duyệt là artifact của report, giữ theo vòng đời report; gói chờ và hành động chưa rõ phải được đối chiếu trước khi xóa phần cần phục hồi. Cleanup không xóa email Google. Cần đo RAM/đĩa với đủ stack và thời gian lưu; không tự giảm retention để vừa VPS.
 
@@ -215,6 +215,6 @@ Còn phải kiểm chứng khi triển khai: tương thích package/gateway, ren
 
 Phần chưa hoàn tất PRD và ý nghĩa thời gian xử lý do [trạng thái và giới hạn](application-guide.md#trạng-thái-và-giới-hạn) sở hữu. Không dùng một lượt thành công hoặc owner duyệt nội dung để kết luận đã đạt toàn bộ chất lượng PRD.
 
-[Evals](evaluation-guide.md) nằm ngoài runtime: cases/fixture là đầu vào; golden riêng tư phải có người review và khóa trước chấm. Runner hiện hỗ trợ xuất/chấm lượt live; replay provider frozen còn phải triển khai. Không dùng kết quả live làm bằng chứng hồi quy frozen.
+[Evals](evaluation-guide.md) nằm ngoài runtime: cases/fixture là đầu vào; golden riêng tư phải có người review và khóa trước chấm. Runner hỗ trợ xuất/chấm lượt live và replay có ghi/khóa response provider; phạm vi generation và collection được mô tả ở hướng dẫn eval. Không dùng output live cũ thay response provider chưa từng ghi, hoặc coi replay là bằng chứng chất lượng hay thời gian thực.
 
 Email intake thuộc luồng Email: [classifier](../apps/backend/src/email_agentic/agents/email_intake.py) chỉ đề xuất danh tính, [service](../apps/backend/src/email_agentic/domains/inbox/automation.py) tạo run bằng ResearchService hiện có; owner xác nhận trước khi workflow nghiên cứu tiếp tục. [GmailSync](../apps/backend/src/email_agentic/domains/inbox/sync.py) dùng cursor bền vững và jobs PostgreSQL, không thêm broker hoặc agent lead. Cấu hình và cách dùng xem [hướng dẫn ứng dụng](application-guide.md#từ-gmail-đến-reply).

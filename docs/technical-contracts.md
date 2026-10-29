@@ -121,3 +121,9 @@ Meeting là nguồn riêng với email; API không nhận đồng thời hai ngu
 [ReportFiles](../apps/backend/src/email_agentic/domains/reports/files.py) sở hữu bytes/checksum và quyền tải; [renderer](../apps/backend/src/email_agentic/integrations/report_export.py) chạy tách process với giới hạn tài nguyên, không tải ảnh hoặc resource web/file. Export không bật gửi hay thay lựa chọn attachment. Chỉ định dạng được chọn khi sửa mới thuộc phiên bản cần duyệt. File có thể được dùng lại giữa các phiên bản cùng run khi Markdown không đổi; kiểm owner, run, nội dung gốc, descriptor và checksum trước duyệt/xuất draft/gửi. Đổi nội dung report không được dùng file cũ.
 
 [Retention](../apps/backend/src/email_agentic/platform/retention.py) là nguồn chuẩn của các điều kiện bảo vệ và cleanup. Payload nguồn/checkpoint/evidence hết hạn sau 30 ngày; report/file và KB draft sau 90 ngày; KB đã duyệt giữ nguyên. Giữ tombstone và receipt để tránh nhập/gửi lại. Nguồn hết hạn không được khôi phục bằng Gmail sync hoặc chỉnh/sử dụng lại report; lịch còn khả dụng được giữ. Audit 30 ngày; log container xoay vòng, Prometheus/Tempo có retention riêng trong infra. Lịch vận hành chỉ apply sau backup thành công.
+
+### Đối chiếu Sent và trace queue
+
+GET `/api/v1/sent-review` chỉ trả tối đa 100 action email của owner cùng email đúng phiên bản gắn approval; GET theo action ID kiểm owner trước đọc Google. Cả hai trả private/no-store. Đối chiếu không cập nhật receipt, approval, job hoặc gửi lại. Kết quả không tìm thấy/nhiều kết quả/mismatch không cho phép tự retry gửi. Nội dung hoặc provenance đã purge không được đối chiếu như email rỗng. Hợp đồng kiểu do [routes](../apps/backend/src/email_agentic/api/routes.py) sở hữu.
+
+Queue chỉ lưu W3C traceparent, không baggage/tracestate hoặc payload. Worker tạo span trước task con và khôi phục context từ job; trigger resume được liên kết bằng span link trong trace mới. Trace là quan sát, không chứng minh quyền hay quyết định duyệt.

@@ -1,6 +1,6 @@
 # CI/CD trên GitHub Actions
 
-[CI and VPS deploy](../.github/workflows/ci-cd.yml) chạy khi push `main`, mở/cập nhật pull request hoặc chạy thủ công. Job `verify` cài dependencies từ lockfiles, chạy lint, typecheck/build web, build hai Docker image, backup/migrate PostgreSQL riêng và chạy backend tests. Không dùng tài khoản Google, golden, API key hoặc dữ liệu production trong CI. Kiểm đóng gói release cũng phải pass.
+[CI and VPS deploy](../.github/workflows/ci-cd.yml) chạy khi push `main`, mở/cập nhật pull request hoặc chạy thủ công. Job `verify` cài dependencies từ lockfiles, chạy lint, typecheck/build web, build hai Docker image, backup/migrate PostgreSQL riêng và chạy backend tests. CI cài Poppler/Tesseract tiếng Việt và Anh để kiểm OCR thực, không bỏ qua đường thành công vì thiếu engine. Không dùng tài khoản Google, golden, API key hoặc dữ liệu production trong CI. Kiểm đóng gói release cũng phải pass.
 
 Job `deploy` chỉ chạy sau `verify` thành công, trên `main` và environment `vps`. Pull request không nhận secrets triển khai. Các action được ghim bằng commit; không hủy một deployment đang chạy khi có push mới. VPS còn giữ khóa deploy riêng để chặn hai phiên SSH triển khai đồng thời. Commit cũ hơn HEAD của `main` bị từ chối trước cutover.
 

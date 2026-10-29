@@ -5,6 +5,7 @@
 .secrets/
 .runtime/
 .wrangler/
+.playwright-mcp/
 
 # Machine-specific infrastructure and operational records
 config/cloudflared.yml
