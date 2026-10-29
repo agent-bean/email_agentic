@@ -4,29 +4,320 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, post } from '../lib/api';
 import { ErrorMessage } from '../components/status';
 
-export type Attachment = { filename: string; size: number; extraction: { status: string; text?: string; pages?: number; pages_read?: number; truncated?: boolean; page_results?: { page: number; method: string; status: string; text: string }[] } };
-export type SourceMessage = { id: string; thread_id: string; mailbox?: string; subject: string; source_text: string; body_format: string; headers: Record<string, string>; attachments: Attachment[] };
-export type MeetingEvent = { summary?: string; description?: string; location?: string; status?: string; start?: { dateTime?: string; date?: string }; end?: { dateTime?: string; date?: string }; attendees?: { email?: string; displayName?: string }[] };
-export function MeetingSource({ event }: { event: MeetingEvent }) { return <div className="preserve"><strong>{event.summary || 'Cuộc họp'}</strong><p>{event.start?.dateTime || event.start?.date} — {event.end?.dateTime || event.end?.date}</p>{event.status === 'cancelled' && <p>Cuộc họp đã bị hủy.</p>}{event.location && <p>{event.location}</p>}{event.description && <p>{event.description}</p>}{event.attendees?.length ? <p>Người tham dự: {event.attendees.map(a => a.displayName || a.email).join(', ')}</p> : null}</div>; }
-export type SourceInput = { id: string; kind: string; source_id: string; content: SourceMessage & MeetingEvent; created_at: string; calendar_available?: boolean | null; intake_status?: string | null; research_run_id?: string | null };
+export type Attachment = {
+  filename: string;
+  size: number;
+  extraction: {
+    status: string;
+    text?: string;
+    pages?: number;
+    pages_read?: number;
+    truncated?: boolean;
+    page_results?: {
+      page: number;
+      method: string;
+      status: string;
+      text: string;
+    }[];
+  };
+};
+export type SourceMessage = {
+  id: string;
+  thread_id: string;
+  mailbox?: string;
+  subject: string;
+  source_text: string;
+  body_format: string;
+  headers: Record<string, string>;
+  attachments: Attachment[];
+};
+export type MeetingEvent = {
+  summary?: string;
+  description?: string;
+  location?: string;
+  status?: string;
+  start?: { dateTime?: string; date?: string };
+  end?: { dateTime?: string; date?: string };
+  attendees?: { email?: string; displayName?: string }[];
+};
+export function MeetingSource({ event }: { event: MeetingEvent }) {
+  return (
+    <div className="preserve">
+      <strong>{event.summary || 'Cuộc họp'}</strong>
+      <p>
+        {event.start?.dateTime || event.start?.date} —{' '}
+        {event.end?.dateTime || event.end?.date}
+      </p>
+      {event.status === 'cancelled' && <p>Cuộc họp đã bị hủy.</p>}
+      {event.location && <p>{event.location}</p>}
+      {event.description && <p>{event.description}</p>}
+      {event.attendees?.length ? (
+        <p>
+          Người tham dự:{' '}
+          {event.attendees.map((a) => a.displayName || a.email).join(', ')}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+export type SourceInput = {
+  id: string;
+  kind: string;
+  source_id: string;
+  content: SourceMessage & MeetingEvent;
+  created_at: string;
+  calendar_available?: boolean | null;
+  intake_status?: string | null;
+  research_run_id?: string | null;
+};
 
 export function Attachments({ items }: { items: Attachment[] }) {
-  const labels: Record<string, string> = { succeeded: 'Đã đọc', no_text: 'Không có văn bản đọc được', partial: 'Đã đọc một phần', ocr_unavailable: 'Chưa cài công cụ OCR', ocr_timeout: 'OCR hết thời gian', ocr_failed: 'OCR thất bại', ocr_limit_reached: 'Vượt giới hạn OCR', encrypted: 'PDF có mật khẩu', too_large: 'Tệp quá lớn', unsupported_type: 'Chưa hỗ trợ định dạng này', limit_reached: 'Vượt giới hạn đọc tệp', timeout: 'Hết thời gian đọc', invalid_pdf: 'Không đọc được PDF', extraction_failed: 'Đọc tệp thất bại' };
-  return items.length ? <div><h3>File đính kèm</h3>{items.map((item, index) => <details key={index} className="record"><summary>{item.filename} · {Math.ceil(item.size / 1024)} KB · {labels[item.extraction.status] ?? item.extraction.status}</summary>{item.extraction.pages != null && <p className="muted">Đã đọc {item.extraction.pages_read}/{item.extraction.pages} trang{item.extraction.truncated ? '; nội dung được giới hạn' : ''}.</p>}{item.extraction.page_results ? item.extraction.page_results.map(page => <div key={page.page}><p className="muted">Trang {page.page} · {page.method === "ocr" ? "OCR (cần kiểm tra lại nhận dạng)" : "Lớp văn bản"} · {labels[page.status] ?? page.status}</p>{page.text && <pre className="preserve">{page.text}</pre>}</div>) : item.extraction.text && <pre className="preserve">{item.extraction.text}</pre>}</details>)}</div> : null;
+  const labels: Record<string, string> = {
+    succeeded: 'Đã đọc',
+    no_text: 'Không có văn bản đọc được',
+    partial: 'Đã đọc một phần',
+    ocr_unavailable: 'Chưa cài công cụ OCR',
+    ocr_timeout: 'OCR hết thời gian',
+    ocr_failed: 'OCR thất bại',
+    ocr_limit_reached: 'Vượt giới hạn OCR',
+    encrypted: 'PDF có mật khẩu',
+    too_large: 'Tệp quá lớn',
+    unsupported_type: 'Chưa hỗ trợ định dạng này',
+    limit_reached: 'Vượt giới hạn đọc tệp',
+    timeout: 'Hết thời gian đọc',
+    invalid_pdf: 'Không đọc được PDF',
+    extraction_failed: 'Đọc tệp thất bại',
+  };
+  return items.length ? (
+    <div>
+      <h3>File đính kèm</h3>
+      {items.map((item, index) => (
+        <details key={index} className="record">
+          <summary>
+            {item.filename} · {Math.ceil(item.size / 1024)} KB ·{' '}
+            {labels[item.extraction.status] ?? item.extraction.status}
+          </summary>
+          {item.extraction.pages != null && (
+            <p className="muted">
+              Đã đọc {item.extraction.pages_read}/{item.extraction.pages} trang
+              {item.extraction.truncated ? '; nội dung được giới hạn' : ''}.
+            </p>
+          )}
+          {item.extraction.page_results
+            ? item.extraction.page_results.map((page) => (
+                <div key={page.page}>
+                  <p className="muted">
+                    Trang {page.page} ·{' '}
+                    {page.method === 'ocr'
+                      ? 'OCR (cần kiểm tra lại nhận dạng)'
+                      : 'Lớp văn bản'}{' '}
+                    · {labels[page.status] ?? page.status}
+                  </p>
+                  {page.text && <pre className="preserve">{page.text}</pre>}
+                </div>
+              ))
+            : item.extraction.text && (
+                <pre className="preserve">{item.extraction.text}</pre>
+              )}
+        </details>
+      ))}
+    </div>
+  ) : null;
+}
+
+const emailIntakeLabels: Record<string, string> = {
+  queued: 'Đang phân loại email và đề xuất doanh nghiệp…',
+  skipped:
+    'Không tự tạo nghiên cứu cho email này. Bạn vẫn có thể tạo thủ công.',
+  needs_review:
+    'Chưa xác định rõ doanh nghiệp. Hãy nhập tên và domain để nghiên cứu.',
+  failed: 'Chưa phân loại được email. Bạn có thể tạo nghiên cứu thủ công.',
+};
+const meetingIntakeLabels: Record<string, string> = {
+  queued: 'Đang đề xuất doanh nghiệp cho cuộc họp…',
+  skipped: 'Không tự tạo nghiên cứu cho cuộc họp này.',
+  needs_review: 'Cần nhập doanh nghiệp để chuẩn bị cuộc họp.',
+  failed: 'Cần nhập doanh nghiệp để chuẩn bị cuộc họp.',
+};
+
+function SourceCard({ item }: { item: SourceInput }) {
+  return (
+    <article className="record">
+      <h2>
+        {item.content.subject ||
+          item.content.summary ||
+          (item.kind === 'email' ? 'Email' : 'Cuộc họp')}
+      </h2>
+      {item.kind === 'email' &&
+      item.content.status === 'succeeded' &&
+      item.content.source_text ? (
+        <>
+          <p className="muted">
+            {item.content.headers.From} · {item.content.headers.Date}
+          </p>
+          <details>
+            <summary>Xem email gốc</summary>
+            <pre className="preserve">{item.content.source_text}</pre>
+            {item.content.body_format === 'html' && (
+              <p className="muted">
+                Email HTML được hiển thị dưới dạng văn bản an toàn.
+              </p>
+            )}
+            <Attachments items={item.content.attachments} />
+          </details>
+          {item.research_run_id ? (
+            <Link
+              className="button"
+              to={`/research/${item.research_run_id}?view=email`}
+            >
+              Mở nghiên cứu
+            </Link>
+          ) : (
+            <>
+              <p className="muted">
+                {emailIntakeLabels[item.intake_status ?? ''] ?? ''}
+              </p>
+              <Link className="button" to={`/research/new?input=${item.id}`}>
+                Nghiên cứu từ email này
+              </Link>
+            </>
+          )}
+        </>
+      ) : item.kind === 'email' ? (
+        <p className="muted">
+          Chưa đọc được nội dung email này. Đồng bộ lại để thử tiếp.
+        </p>
+      ) : (
+        <>
+          <MeetingSource event={item.content} />
+          {item.research_run_id ? (
+            <Link className="button" to={`/research/${item.research_run_id}`}>
+              Mở nghiên cứu trước họp
+            </Link>
+          ) : (
+            <>
+              <p className="muted">
+                {meetingIntakeLabels[item.intake_status ?? ''] ??
+                  'Tự đề xuất chuẩn bị trong 24 giờ trước họp; cuộc họp bị hủy hoặc đã qua sẽ không chạy.'}
+              </p>
+              {item.calendar_available === false ? (
+                <p>
+                  Cuộc họp không còn trong lịch sắp tới. Không tạo nghiên cứu từ
+                  bản lịch cũ.
+                </p>
+              ) : (
+                <Link className="button" to={`/research/new?input=${item.id}`}>
+                  Chuẩn bị trước họp
+                </Link>
+              )}
+            </>
+          )}
+        </>
+      )}
+    </article>
+  );
 }
 
 export function Inbox() {
   const [showOwn, setShowOwn] = useState(false);
   const client = useQueryClient();
-  const query = useQuery({ queryKey: ['inputs'], queryFn: () => api<SourceInput[]>('/inputs'), refetchInterval: 5000 });
-  const sync = useMutation({ mutationFn: (provider: string) => post(`/sync/${provider}`), onSuccess: () => { void client.invalidateQueries({ queryKey: ['inputs'] }); } });
-  const items = query.data?.filter(item => item.kind !== 'email' || !item.content.headers || showOwn ||
-    !item.content.headers.From?.toLowerCase().includes(item.content.mailbox?.toLowerCase() || '\0')).sort((a, b) => (Date.parse(b.content.headers?.Date ?? b.created_at) || 0) - (Date.parse(a.content.headers?.Date ?? a.created_at) || 0));
-  return <><header><div><p className="eyebrow">DỮ LIỆU CỦA BẠN</p><h1>Email & cuộc họp</h1><p className="muted">Chọn email để nghiên cứu và chuẩn bị reply trong đúng thread Gmail.</p></div><div className="actions"><button disabled={sync.isPending} onClick={() => sync.mutate('email')}>Đồng bộ Gmail</button><button className="secondary" disabled={sync.isPending} onClick={() => sync.mutate('calendar')}>Đồng bộ lịch</button></div></header>
-    <ErrorMessage error={query.error || sync.error} />{sync.isSuccess && <p role="status">Đã nhận yêu cầu đồng bộ. Danh sách tự cập nhật khi xử lý xong.</p>}
-    <label className="check"><input type="checkbox" checked={showOwn} onChange={event => setShowOwn(event.target.checked)} />Hiển thị cả email từ chính hộp thư này</label>
-    <section className="panel">{query.isPending ? <p role="status">Đang tải…</p> : query.isError ? <button onClick={() => void query.refetch()}>Thử lại</button> : !items?.length ? <p>Chưa có dữ liệu. Chọn Đồng bộ Gmail để đọc hộp thư.</p> : items.map(item => <article className="record" key={item.id}>
-      <h2>{item.content.subject || item.content.summary || (item.kind === 'email' ? 'Email' : 'Cuộc họp')}</h2>
-      {item.kind === 'email' && item.content.status === 'succeeded' && item.content.source_text ? <><p className="muted">{item.content.headers.From} · {item.content.headers.Date}</p><details><summary>Xem email gốc</summary><pre className="preserve">{item.content.source_text}</pre>{item.content.body_format === 'html' && <p className="muted">Email HTML được hiển thị dưới dạng văn bản an toàn.</p>}<Attachments items={item.content.attachments} /></details>{item.research_run_id ? <Link className="button" to={`/research/${item.research_run_id}?view=email`}>Mở nghiên cứu</Link> : <><p className="muted">{item.intake_status === 'queued' ? 'Đang phân loại email và đề xuất doanh nghiệp…' : item.intake_status === 'skipped' ? 'Không tự tạo nghiên cứu cho email này. Bạn vẫn có thể tạo thủ công.' : item.intake_status === 'needs_review' ? 'Chưa xác định rõ doanh nghiệp. Hãy nhập tên và domain để nghiên cứu.' : item.intake_status === 'failed' ? 'Chưa phân loại được email. Bạn có thể tạo nghiên cứu thủ công.' : ''}</p><Link className="button" to={`/research/new?input=${item.id}`}>Nghiên cứu từ email này</Link></>}</> : item.kind === 'email' ? <p className="muted">Chưa đọc được nội dung email này. Đồng bộ lại để thử tiếp.</p> : <><MeetingSource event={item.content} />{item.research_run_id ? <Link className="button" to={`/research/${item.research_run_id}`}>Mở nghiên cứu trước họp</Link> : <><p className="muted">{item.intake_status === 'queued' ? 'Đang đề xuất doanh nghiệp cho cuộc họp…' : item.intake_status === 'skipped' ? 'Không tự tạo nghiên cứu cho cuộc họp này.' : item.intake_status === 'needs_review' || item.intake_status === 'failed' ? 'Cần nhập doanh nghiệp để chuẩn bị cuộc họp.' : 'Tự đề xuất chuẩn bị trong 24 giờ trước họp; cuộc họp bị hủy hoặc đã qua sẽ không chạy.'}</p>{item.calendar_available === false ? <p>Cuộc họp không còn trong lịch sắp tới. Không tạo nghiên cứu từ bản lịch cũ.</p> : <Link className="button" to={`/research/new?input=${item.id}`}>Chuẩn bị trước họp</Link>}</>}</>}
-    </article>)}</section></>;
+  const query = useQuery({
+    queryKey: ['inputs'],
+    queryFn: () => api<SourceInput[]>('/inputs'),
+    refetchInterval: 5000,
+  });
+  const sync = useMutation({
+    mutationFn: (provider: string) => post(`/sync/${provider}`),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ['inputs'] });
+    },
+  });
+  const items = query.data
+    ?.filter(
+      (item) =>
+        item.kind !== 'email' ||
+        !item.content.headers ||
+        showOwn ||
+        !item.content.headers.From?.toLowerCase().includes(
+          item.content.mailbox?.toLowerCase() || '\0',
+        ),
+    )
+    .sort(
+      (a, b) =>
+        (Date.parse(b.content.headers?.Date ?? b.created_at) || 0) -
+        (Date.parse(a.content.headers?.Date ?? a.created_at) || 0),
+    );
+  return (
+    <>
+      <header>
+        <div>
+          <p className="eyebrow">DỮ LIỆU CỦA BẠN</p>
+          <h1>Email & cuộc họp</h1>
+          <p className="muted">
+            Chọn email để nghiên cứu và chuẩn bị reply trong đúng thread Gmail.
+          </p>
+        </div>
+        <div className="actions">
+          <button
+            disabled={sync.isPending}
+            onClick={() => sync.mutate('email')}
+          >
+            {sync.isPending && sync.variables === 'email'
+              ? 'Đang yêu cầu…'
+              : 'Đồng bộ Gmail'}
+          </button>
+          <button
+            className="secondary"
+            disabled={sync.isPending}
+            onClick={() => sync.mutate('calendar')}
+          >
+            {sync.isPending && sync.variables === 'calendar'
+              ? 'Đang yêu cầu…'
+              : 'Đồng bộ lịch'}
+          </button>
+        </div>
+      </header>
+      <ErrorMessage error={query.error || sync.error} />
+      {sync.isSuccess && (
+        <p role="status">
+          Đã nhận yêu cầu đồng bộ. Danh sách tự cập nhật khi xử lý xong.
+        </p>
+      )}
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={showOwn}
+          onChange={(event) => setShowOwn(event.target.checked)}
+        />
+        Hiển thị cả email từ chính hộp thư này
+      </label>
+      <section className="panel">
+        {query.isPending ? (
+          <p role="status">Đang tải…</p>
+        ) : query.isError ? (
+          <button onClick={() => void query.refetch()}>Thử lại</button>
+        ) : !items?.length ? (
+          <div className="empty">
+            <h2>
+              {query.data?.length
+                ? 'Không có email phù hợp bộ lọc'
+                : 'Chưa có email hoặc cuộc họp'}
+            </h2>
+            <p>
+              {query.data?.length
+                ? 'Bật hiển thị email từ chính hộp thư để xem thêm.'
+                : 'Chọn Đồng bộ Gmail hoặc Đồng bộ lịch để lấy dữ liệu nguồn.'}
+            </p>
+            {Boolean(query.data?.length) && (
+              <button className="secondary" onClick={() => setShowOwn(true)}>
+                Hiển thị tất cả email
+              </button>
+            )}
+          </div>
+        ) : (
+          items.map((item) => <SourceCard key={item.id} item={item} />)
+        )}
+      </section>
+    </>
+  );
 }

@@ -5,9 +5,18 @@ import { BrowserRouter } from 'react-router-dom';
 import { App } from './app/app';
 import './app/styles.css';
 
-const client = new QueryClient({ defaultOptions: {
-  queries: { staleTime: 2000, retry: false }, mutations: { retry: false },
-}});
+const client = new QueryClient({
+  defaultOptions: {
+    queries: { staleTime: 2000, retry: false },
+    mutations: { retry: false },
+  },
+});
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode><QueryClientProvider client={client}><BrowserRouter><App /></BrowserRouter></QueryClientProvider></React.StrictMode>,
+  <React.StrictMode>
+    <QueryClientProvider client={client}>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </QueryClientProvider>
+  </React.StrictMode>,
 );
