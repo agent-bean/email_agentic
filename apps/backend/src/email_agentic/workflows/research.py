@@ -1,7 +1,10 @@
 import asyncio
 import json
+import logging
 import re
+import time
 import uuid
+from contextvars import ContextVar
 from datetime import datetime, UTC
 from email.utils import parsedate_to_datetime
 from typing import TypedDict
@@ -60,6 +63,28 @@ def cited_urls(text):
 def make_graph(container, checkpointer):
     c = container
     human = HumanApprovalAgent()
+    node_started = ContextVar("research_node_started", default=None)
+
+    def measured(node):
+        async def execute(state):
+            run = await run_record(state)
+            previous = run["elapsed_seconds"] or 0
+            started = time.monotonic()
+            token = node_started.set(started)
+            try:
+                return await node(state)
+            finally:
+                duration = time.monotonic() - started
+                node_started.reset(token)
+                await c.db.execute(
+                    "UPDATE research_runs SET elapsed_seconds=%s WHERE id=%s",
+                    (previous + duration, run["id"]),
+                )
+                logging.getLogger(__name__).info(
+                    "Research stage: run_id=%s stage=%s seconds=%.3f",
+                    run["id"], node.__name__, duration,
+                )
+        return execute
 
     async def run_record(state):
         return await c.db.one("SELECT * FROM research_runs WHERE id=%s", (state["run_id"],))
@@ -156,12 +181,13 @@ def make_graph(container, checkpointer):
         unknown = (cited | cited_urls(draft.email_body)) - known
         if unknown:
             raise Conflict("Report contains an unsupported source URL")
-        elapsed = (datetime.now(UTC) - run["created_at"]).total_seconds()
+        elapsed = (run["elapsed_seconds"] or 0) + time.monotonic() - node_started.get()
         quality = {
             "cited_sources": len(cited & known),
             "citation_correction_attempted": correction_attempted,
             "source_target_met": len(cited & known) >= 12,
             "elapsed_seconds": elapsed,
+            "timing_basis": "active_processing",
             "target_seconds": run["config"]["target_seconds"],
             "time_target_met": elapsed <= run["config"]["target_seconds"],
             "factual_accuracy": "requires_review",
@@ -221,8 +247,8 @@ def make_graph(container, checkpointer):
     graph = StateGraph(ResearchState)
     for name, node in [
         ("identity", identity),
-        ("gather", gather),
-        ("report", report),
+        ("gather", measured(gather)),
+        ("report", measured(report)),
         ("approval", approval),
     ]:
         graph.add_node(name, node)

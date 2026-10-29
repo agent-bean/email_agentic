@@ -98,7 +98,7 @@ Hợp đồng HTTP do [OpenAPI/Pydantic](../apps/backend/src/email_agentic/api/r
 
 Đã kiểm chứng queue/checkpoint qua restart, version approval/outbox, lease, auth/Origin, golden hash và build. Luồng local với Google/Tavily và gateway thật đã đi qua tạo nghiên cứu, xác nhận doanh nghiệp, tạo nháp, sửa và duyệt phiên bản mới với gửi email/lưu KB tắt. Đây là kiểm tra một ca, chưa phải nghiệm thu sáu ca hoặc chất lượng nội dung.
 
-`REPORT_TARGET_SECONDS` là mục tiêu chất lượng theo từng lượt; `RESEARCH_TIMEOUT_SECONDS` là ngân sách xử lý. Tăng ngân sách không đồng nghĩa đạt mục tiêu. Số đo hiện còn tính thời gian chờ xác nhận của người dùng.
+`REPORT_TARGET_SECONDS` là mục tiêu chất lượng theo từng lượt; `RESEARCH_TIMEOUT_SECONDS` là ngân sách xử lý. Tăng ngân sách không đồng nghĩa đạt mục tiêu. Số đo `active_processing` cộng thời gian thu thập nguồn và tạo báo cáo qua các lần thử, không tính thời gian chờ trong queue hoặc chờ người dùng xác nhận. Báo cáo cũ chưa có `timing_basis` vẫn dùng số đo trước đây.
 
 Request LLM dùng ngân sách cấu hình tại [LLM integration](../apps/backend/src/email_agentic/integrations/llm.py), thay vì bị timeout mặc định của HTTP client cắt ngắn. Khi cấu hình riêng có ngân sách quá thấp, có thể chạy local bằng `RESEARCH_TIMEOUT_SECONDS=180 make up`; override không được lưu vào file cấu hình. Lỗi mạng từ provider vẫn có thể xảy ra và không chứng minh model thiếu hỗ trợ schema.
 
