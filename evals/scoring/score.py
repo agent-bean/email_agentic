@@ -51,7 +51,7 @@ def score(output, golden, golden_sha, review=None):
     if golden.source_mode == "frozen":
         return {
             "eligible": False,
-            "reason": "Frozen provider replay is not implemented; live output cannot count as regression evidence",
+            "reason": "Frozen full-workflow scoring is unavailable; report-generation provider replay alone is not product acceptance",
             "output_sha256": output_sha,
         }
     report = reports[0]
@@ -79,6 +79,7 @@ def score(output, golden, golden_sha, review=None):
     valid_review = bool(
         review
         and review.get("reviewer")
+        and review.get("reviewer_kind", "human") == "human"
         and review.get("output_sha256") == output_sha
         and review.get("golden_sha256") == golden_sha
     )

@@ -124,6 +124,8 @@ def test_manual_review_is_bound_to_exact_output():
     }
     result = score(output, golden, "locked-hash", review)
     assert result["eligible"] is True and result["completeness"] == 1
+    independent = {**review, "reviewer_kind": "independent_agent"}
+    assert score(output, golden, "locked-hash", independent)["eligible"] is False
     assert result["passed"] is False  # No cited sources; a fact review alone is insufficient.
     output["reports"][0]["markdown"] = "Changed after review"
     assert score(output, golden, "locked-hash", review)["eligible"] is False
