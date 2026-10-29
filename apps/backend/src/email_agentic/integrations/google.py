@@ -267,3 +267,30 @@ class Google:
         )
         matches = result.get("messages", [])
         return matches[0]["id"] if len(matches) == 1 else None
+
+    async def review_sent(self, report):
+        """Read actual Gmail state without sending or changing a stored receipt."""
+        profile = await self.call("gmail", "GET", "gmail/v1/users/me/profile")
+        if profile.get("emailAddress", "").casefold() != report["owner"].casefold():
+            raise ProviderFailure("gmail", category="mailbox_mismatch")
+        result = await self.call("gmail", "GET", "gmail/v1/users/me/messages", params={
+            "q": f"in:sent rfc822msgid:{report['correlation_id'].strip('<>')}", "maxResults": 2})
+        matches = list({item["id"]: item for item in result.get("messages", [])}.values())
+        if len(matches) != 1 or result.get("nextPageToken"):
+            return {"verification": "multiple_matches" if matches else "not_found", "provider_id": None}
+        message = await self.call("gmail", "GET", f"gmail/v1/users/me/messages/{matches[0]['id']}",
+                                  params={"format": "raw"})
+        provider_id = message.get("id", matches[0]["id"])
+        if message.get("sizeEstimate", 0) > 25 * 1024 * 1024:
+            return {"verification": "too_large", "provider_id": provider_id}
+        try:
+            raw = base64.urlsafe_b64decode(message["raw"] + "===")
+            mime = BytesParser(policy=policy.default).parsebytes(raw)
+            verified = ("SENT" in message.get("labelIds", [])
+                        and str(mime.get("Message-ID", "")) == report["correlation_id"]
+                        and (not report.get("provider_id") or report["provider_id"] == provider_id)
+                        and self.draft_matches(report, {"message": message if report.get("source_message") else
+                                                {**message, "threadId": None}}))
+        except (KeyError, ValueError, TypeError):
+            verified = False
+        return {"verification": "matched" if verified else "mismatch", "provider_id": provider_id}

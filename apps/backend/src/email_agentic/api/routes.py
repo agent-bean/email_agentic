@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 from uuid import UUID
 
@@ -291,3 +292,44 @@ async def download_file(file_id: UUID, request: Request, inline: bool = False, a
     return Response(content=bytes(row['data']), media_type=row['mime_type'], headers={
         'Content-Disposition': f'{"inline" if inline and row["format"] == "pdf" else "attachment"}; filename="{row["filename"]}"', 'Cache-Control': 'private, no-store',
         'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "sandbox; default-src 'none'"})
+
+
+class SentReviewRow(BaseModel):
+    id: UUID
+    run_id: UUID
+    version: int
+    email_subject: str
+    email_body: str
+    recipients: dict[str, list[str]]
+    status: str
+    provider_id: str | None
+    error_code: str | None
+    created_at: datetime
+
+
+class SentVerification(BaseModel):
+    verification: str
+    provider_id: str | None
+
+
+@router.get("/sent-review", response_model=list[SentReviewRow])
+async def sent_review(request: Request, response: Response, actor: Actor = Depends(authenticate)):
+    response.headers['Cache-Control'] = 'private, no-store'
+    return await request.app.state.container.db.all(
+        """SELECT p.id,r.run_id,r.version,r.email_subject,r.email_body,r.recipients,p.status,p.provider_id,
+        p.error_code,a.created_at FROM publication_actions p JOIN approvals a ON a.id=p.approval_id
+        JOIN reports r ON r.id=a.report_id WHERE r.owner=%s AND p.kind='email'
+        ORDER BY a.created_at DESC LIMIT 100""", (actor.owner,))
+
+
+@router.get("/sent-review/{action_id}", response_model=SentVerification)
+async def verify_sent(action_id: UUID, request: Request, response: Response, actor: Actor = Depends(authenticate)):
+    from email_agentic.platform.errors import ProviderFailure
+
+    response.headers['Cache-Control'] = 'private, no-store'
+    c = request.app.state.container
+    try:
+        async with asyncio.timeout(30):
+            return await c.publication.sent_review(actor.owner, action_id, c.google)
+    except (ProviderFailure, TimeoutError):
+        raise HTTPException(502, "Chưa đối chiếu được Gmail Sent. Kiểm tra kết nối/quyền đọc Gmail rồi thử lại.") from None

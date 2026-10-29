@@ -42,7 +42,7 @@ jobs:
       - name: Install application dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends libpango-1.0-0 libpangoft2-1.0-0 fonts-dejavu-core
+          sudo apt-get install -y --no-install-recommends libpango-1.0-0 libpangoft2-1.0-0 fonts-dejavu-core poppler-utils tesseract-ocr tesseract-ocr-vie
           uv sync --frozen --project apps/backend
           npm ci --prefix apps/web --no-audit --no-fund
       - name: Lint, typecheck and web build

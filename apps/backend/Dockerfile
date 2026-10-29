@@ -1,5 +1,5 @@
 FROM python:3.13-slim-bookworm AS backend
-RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates libpango-1.0-0 libpangoft2-1.0-0 fonts-dejavu-core && \
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates libpango-1.0-0 libpangoft2-1.0-0 fonts-dejavu-core poppler-utils tesseract-ocr tesseract-ocr-vie && \
     install -d /usr/share/postgresql-common/pgdg && \
     curl --fail --silent --show-error https://www.postgresql.org/media/keys/ACCC4CF8.asc -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc && \
     echo 'deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main' > /etc/apt/sources.list.d/pgdg.list && \

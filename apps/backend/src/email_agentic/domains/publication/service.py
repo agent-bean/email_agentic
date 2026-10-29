@@ -103,3 +103,19 @@ class Publication:
                 "UPDATE publication_actions SET status='succeeded',updated_at=now() WHERE id=%s",
                 (report["action_id"],),
             )
+
+    async def sent_review(self, owner, action_id, google):
+        from email_agentic.domains.reports.files import ReportFiles
+
+        async with self.db.transaction() as connection:
+            report = await (await connection.execute(
+                """SELECT r.*,runs.source_message,runs.source_input_id,runs.history_purged_at,p.correlation_id,p.provider_id
+                FROM publication_actions p JOIN approvals a ON a.id=p.approval_id
+                JOIN reports r ON r.id=a.report_id JOIN research_runs runs ON runs.id=r.run_id
+                WHERE p.id=%s AND r.owner=%s AND p.kind='email'""", (action_id, owner))).fetchone()
+            if not report:
+                raise NotFound()
+            if report['history_purged_at'] is not None or (report['source_input_id'] and not report['source_message']):
+                return {'verification': 'content_expired', 'provider_id': report['provider_id']}
+            report['attachments'] = await ReportFiles(self.db).selected(connection, report)
+        return await google.review_sent(report)
