@@ -3,8 +3,8 @@
 set -euo pipefail
 umask 077
 test "$(id -u)" = 0
-exec 9>/run/lock/email-agentic-retention.lock
-flock -n 9 || { echo 'Retention is already running'; exit 1; }
+exec 9>/run/lock/email-agentic-deploy.lock
+flock -n 9 || { echo 'Deployment or retention is already running'; exit 1; }
 cd /opt/email-agentic/current
 export RELEASE_ID COMPOSE_ENV_FILES=/etc/email-agentic/runtime.conf
 RELEASE_ID=$(cat .release-id)
