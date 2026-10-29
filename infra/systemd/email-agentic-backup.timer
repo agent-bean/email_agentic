@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Email Assistant backup
+
+[Timer]
+OnCalendar=*-*-* 02:00:00 Asia/Bangkok
+RandomizedDelaySec=15m
+Persistent=true
+Unit=email-agentic-backup.service
+
+[Install]
+WantedBy=timers.target

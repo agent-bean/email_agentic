@@ -9,7 +9,13 @@ import tarfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-INPUTS = ("apps/backend", "apps/web", "infra", ".dockerignore")
+INPUTS = (
+    "apps/backend",
+    "apps/web",
+    "infra",
+    "scripts/backup-production.sh",
+    ".dockerignore",
+)
 
 
 def prepare(root, output):

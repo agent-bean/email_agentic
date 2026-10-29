@@ -1,0 +1,16 @@
+[Unit]
+Description=Encrypted Email Assistant database and file backup
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/email-agentic/current
+EnvironmentFile=/etc/default/email-agentic-backup
+ExecStart=/bin/bash /opt/email-agentic/current/scripts/backup-production.sh
+UMask=0077
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
