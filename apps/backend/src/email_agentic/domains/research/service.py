@@ -47,8 +47,8 @@ class ResearchService:
             "target_seconds": self.settings.report_target_seconds,
             "timeout_seconds": self.settings.research_timeout_seconds,
             "model": self.settings.llm_model,
-            "workflow_version": 7,
-            "prompt_version": 11,
+            "workflow_version": 8,
+            "prompt_version": 12,
             "duckduckgo_enabled": self.settings.duckduckgo_enabled,
             "firecrawl_max_pages": self.settings.firecrawl_max_pages
             if self.settings.firecrawl_api_key.get_secret_value() else 0,

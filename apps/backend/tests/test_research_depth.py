@@ -156,3 +156,119 @@ async def test_all_search_areas_use_confirmed_entity_without_restricting_counter
         assert "example.com" in request["query"]
         assert "site:" not in request["query"]
     assert sum(request["news"] for request in tools.requests) == 2
+
+
+def test_article_boundary_excludes_clock_before_exact_heading_and_preserves_body():
+    from email_agentic.agents.web_research import article_body
+
+    prefix = "Tuesday, October 27 2026\n\n# [Publisher](/)\n\n[Sections](/sections)\n\n"
+    body = "# [Regional **technology** partnership](/article)\n\nJuly 02, 2026 - 14:58\n\nSpecific outcome.\n"
+    extracted, context = article_body(prefix + body, "Regional technology partnership")
+    assert extracted == body
+    assert context == {
+        "status": "title_heading_matched", "heading": "Regional technology partnership",
+        "opening": body, "excluded_prefix": prefix,
+    }
+
+
+def test_article_boundary_unknown_keeps_all_content_without_guessing_dates():
+    from email_agentic.agents.web_research import article_body
+
+    content = "October 27, 2026\n\n# Different article\n\nSpecific outcome."
+    assert article_body(content, "Requested article") == (content, {"status": "unknown"})
+    assert article_body(content, "") == (content, {"status": "unknown"})
+
+
+def test_article_boundary_scan_is_bounded_without_truncating_source():
+    from email_agentic.agents.web_research import article_body
+
+    body = "# Regional partnership\n\n" + "Documented outcome.\n" * 10000
+    extracted, context = article_body("Website navigation\n\n" + body, "Regional partnership")
+    assert extracted == body
+    assert context["excluded_prefix"] + extracted == "Website navigation\n\n" + body
+    late = "Navigation.\n" * 6000 + body
+    assert article_body(late, "Regional partnership") == (late, {"status": "unknown"})
+
+
+async def test_article_parsing_can_be_cancelled_without_blocking_event_loop(monkeypatch):
+    import threading
+    from email_agentic.agents import web_research
+
+    started, release, finished = threading.Event(), threading.Event(), threading.Event()
+
+    def blocked_parser(content, title):
+        started.set()
+        try:
+            assert release.wait(2)
+            return content, {"status": "unknown"}
+        finally:
+            finished.set()
+
+    monkeypatch.setattr(web_research, "article_body", blocked_parser)
+    task = asyncio.create_task(WebResearchAgent(None).read_sources(
+        [{"results": [{"url": "https://example.com/article", "raw_content": "Article"}]}], None
+    ))
+    try:
+        assert await asyncio.to_thread(started.wait, 1)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(task, 0.5)
+    finally:
+        release.set()
+        assert await asyncio.to_thread(finished.wait, 1)
+
+
+async def test_duplicate_source_content_is_parsed_once_per_collection(monkeypatch):
+    from email_agentic.agents import web_research
+
+    original = web_research.article_body
+    calls = []
+
+    def counted(content, title):
+        calls.append((content, title))
+        return original(content, title)
+
+    monkeypatch.setattr(web_research, "article_body", counted)
+    responses = [{"results": [{
+        "url": "https://example.com/article", "title": "Article", "raw_content": "# Article\n\nOutcome"
+    } for _ in range(12)]}]
+    await WebResearchAgent(None).read_sources(responses, None)
+    assert len(calls) == 1
+    assert all(item["article_context"]["status"] == "title_heading_matched"
+               for item in responses[0]["results"])
+
+
+async def test_matched_article_wins_over_longer_duplicate_boilerplate_and_prefix_stays_out_of_report():
+    class CapturingLLM:
+        async def structured(self, run_id, schema, system, payload):
+            return json.loads(payload)
+
+    body = "# Regional partnership\n\nJuly 02, 2026\n\n" + "Documented outcome. " * 400
+    prefix = "October 27, 2026 WEBSITE CLOCK\n\n# Publisher\n\n"
+    responses = [{"results": [
+        {"url": "https://example.com/article", "title": "Regional partnership", "raw_content": prefix + body},
+        {"url": "https://example.com/article#section", "title": "Different listing title",
+         "raw_content": "Unmatched boilerplate. " * 800},
+    ]}]
+    await WebResearchAgent(None, read_pages=0).read_sources(responses, None)
+    first, second = responses[0]["results"]
+    assert first["raw_content"] == second["raw_content"] == body
+    assert first["article_context"]["excluded_prefix"] == prefix
+    result = await ReportGenerationAgent(CapturingLLM()).run(
+        {"id": "run", "company_name": "Company", "domain": "example.com", "context": "meeting"},
+        [{"url": first["url"], "content": "Search excerpt\n\n" + first["raw_content"][:8000]}],
+        [{"branch": "web", "result": {"status": "succeeded", "data": responses}}],
+    )
+    assert "WEBSITE CLOCK" not in json.dumps(result)
+    assert result["research_coverage"][0]["article_contexts"][0]["status"] == "title_heading_matched"
+    assert "July 02, 2026" in result["evidence"][0]["content"]
+
+
+def test_article_title_heading_takes_priority_over_same_named_navigation_subheading():
+    from email_agentic.agents.web_research import article_body
+
+    prefix = "## [Regional partnership](/section)\n\nWEBSITE CLOCK\n\n"
+    body = "# Regional partnership\n\nMarch 11, 2025\n\nDocumented outcome."
+    assert article_body(prefix + body, "Regional partnership")[0] == body
+    ambiguous = "## Regional partnership\n\nOne\n\n## Regional partnership\n\nTwo"
+    assert article_body(ambiguous, "Regional partnership") == (ambiguous, {"status": "unknown"})

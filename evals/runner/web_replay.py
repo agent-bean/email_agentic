@@ -84,7 +84,7 @@ class WebTape:
 async def collect(identity, config, tape):
     # Preserve observed deadline decisions and exact timeout arguments. Do not change
     # the event loop clock used by provider timeouts, retries or asyncio scheduling.
-    proxy = SimpleNamespace(Semaphore=asyncio.Semaphore, gather=asyncio.gather,
+    proxy = SimpleNamespace(Semaphore=asyncio.Semaphore, gather=asyncio.gather, to_thread=asyncio.to_thread,
                             get_running_loop=lambda: SimpleNamespace(time=tape.time))
     with patch('email_agentic.agents.web_research.asyncio', proxy):
         try:

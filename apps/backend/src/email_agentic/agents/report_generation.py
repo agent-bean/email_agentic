@@ -89,6 +89,9 @@ Research depth requirements:
   metadata supports recency, exclude the item from confirmed 30-day news and disclose the date uncertainty;
   retain substantive older/undated findings as dated/undated context. Distinguish explicit event dates.
   Keep dates consistent between markdown and email; disclose conflicts.
+  article_contexts identifies an exact title-matched heading and its opening text. Use that article opening
+  for publication-date context, not the search excerpt. A matched heading establishes a body boundary only,
+  not publication-date verification. With status unknown, no article boundary/date has been established.
 - Connect opportunities to BOTH the supplied business need and cited company evidence. Label the connection
   as analysis/hypothesis, not a confirmed need. Explain fit, uncertainties and what should be validated.
 - Finish with 3–5 specific meeting questions grounded in those uncertainties and a practical proposed next step.
@@ -149,6 +152,13 @@ class ReportGenerationAgent:
                         "page_reads": [
                             {"url": entry.get("url"), **entry["page_read"]}
                             for entry in response.get("results", []) if "page_read" in entry
+                        ],
+                        "article_contexts": [
+                            {"url": entry.get("url"), **{
+                                key: value for key, value in entry["article_context"].items()
+                                if key != "excluded_prefix"
+                            }}
+                            for entry in response.get("results", []) if "article_context" in entry
                         ],
                     }
                     for branch in branches

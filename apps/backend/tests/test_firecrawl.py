@@ -133,8 +133,8 @@ async def test_new_run_records_page_limit_without_persisting_api_key(db):
         )
         run = await c.research.get(owner, run_id)
         assert run["config"]["firecrawl_max_pages"] == 4
-        assert run["config"]["workflow_version"] == 7
-        assert run["config"]["prompt_version"] == 11
+        assert run["config"]["workflow_version"] == 8
+        assert run["config"]["prompt_version"] == 12
         assert run["config"]["duckduckgo_enabled"] is True
         assert "test-only" not in json.dumps(run["config"])
 
@@ -214,3 +214,21 @@ async def test_page_read_retains_article_publication_metadata_without_promoting_
     # Search date remains separate so conflicting dates can be reviewed rather than silently overwritten.
     assert item["published_date"] == "2026-10-29"
     assert "4 July 2026" in item["raw_content"]
+
+
+async def test_unscoped_scrape_does_not_replace_identified_search_article_with_boilerplate():
+    class Pages:
+        async def execute(self, *args):
+            return {"markdown": "CURRENT WEBSITE CLOCK\n\n" + "Navigation. " * 1000}
+
+    body = "# Regional partnership\n\nMarch 11, 2025\n\nDocumented outcome."
+    responses = [{"results": [{
+        "url": "https://example.com/article", "title": "Regional partnership",
+        "raw_content": "WEBSITE CLOCK\n\n" + body,
+    }]}]
+    await WebResearchAgent(Pages(), read_pages=1).read_sources(responses, None)
+    item = responses[0]["results"][0]
+    assert item["raw_content"] == body
+    assert item["article_context"]["status"] == "title_heading_matched"
+    assert item["page_read"]["content_selection"] == "search_article_body"
+    assert "CURRENT WEBSITE CLOCK" in item["unscoped_page_content"]
