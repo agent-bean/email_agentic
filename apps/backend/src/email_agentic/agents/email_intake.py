@@ -1,16 +1,7 @@
 """Classify inbound business mail; identity is only a proposal for the owner."""
 import json
-from typing import Literal
-from pydantic import Field
 
-from email_agentic.agents.contracts import StrictModel
-
-
-class EmailIntakeDecision(StrictModel):
-    disposition: Literal['business', 'ignore', 'unclear']
-    company_name: str = Field(max_length=200)
-    domain: str = Field(max_length=253)
-    reason: Literal['business_request', 'automated', 'personal', 'unclear']
+from email_agentic.models.agents import EmailIntakeDecision as EmailIntakeDecision
 
 
 class EmailIntakeAgent:

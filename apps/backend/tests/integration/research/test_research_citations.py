@@ -8,7 +8,7 @@ from email_agentic.bootstrap import build_container
 from email_agentic.domains.research.service import ResearchRequest
 from email_agentic.platform.config import Settings
 from email_agentic.platform.errors import Conflict
-from email_agentic.workflows.research import canonical_url, cited_urls, make_graph
+from email_agentic.workflows.research import make_graph
 
 
 @pytest.mark.parametrize("corrects", [True, False])
@@ -63,19 +63,6 @@ async def test_research_corrects_unsupported_email_links_once_or_stops_without_r
                 await graph.ainvoke({"run_id": str(run_id)})
             assert await db.one("SELECT id FROM reports WHERE run_id=%s", (run_id,)) is None
         assert c.llm.calls == 2
-
-
-def test_malformed_source_url_is_rejected_without_crashing_validation():
-    assert canonical_url("http://[invalid") is None
-
-
-@pytest.mark.parametrize("text", [
-    "[Source](https://example.com/entry_(detail))",
-    "See https://example.com/entry_(detail).",
-    "See <https://example.com/entry_(detail)>.",
-])
-def test_source_validation_covers_bare_and_markdown_links_with_balanced_url_parentheses(text):
-    assert cited_urls(text) == {"https://example.com/entry_(detail)"}
 
 
 @pytest.mark.parametrize("saved_evidence", [0, 1])

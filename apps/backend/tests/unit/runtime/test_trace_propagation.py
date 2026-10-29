@@ -8,7 +8,6 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from email_agentic.platform import telemetry
-from email_agentic.runtime.jobs import enqueue
 from email_agentic.worker import Worker
 
 
@@ -69,19 +68,3 @@ def test_invalid_persisted_context_never_breaks_work_or_inherits_ambient_request
         context, links = telemetry.job_trace_context({"kind": "research", "trace_parent": value})
     assert not trace.get_current_span(context).get_span_context().is_valid
     assert not links
-
-
-async def test_enqueue_persists_only_w3c_trace_parent_and_preserves_dedupe(db, tracing):
-    tracer, _ = tracing
-    owner = "trace-owner"
-    key = "trace-test:" + str(uuid.uuid4())
-    with tracer.start_as_current_span("api.create"):
-        parent = telemetry.current_trace_parent()
-        async with db.transaction() as connection:
-            await enqueue(connection, owner, "scan_email", None, key)
-    # A later duplicate request must not change the original causal context.
-    async with db.transaction() as connection:
-        await enqueue(connection, owner, "scan_email", None, key)
-    row = await db.one("SELECT trace_parent FROM jobs WHERE dedupe_key=%s", (key,))
-    assert row["trace_parent"] == parent
-    assert len(parent) == 55

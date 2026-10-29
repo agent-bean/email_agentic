@@ -29,7 +29,7 @@ class Approvals:
                         source['content'], owner, datetime.now(UTC), self.timezone):
                     raise Conflict("Meeting changed or is no longer upcoming; synchronize Calendar and review its current proposal")
             if company_name is not None:
-                from email_agentic.domains.research.service import ResearchRequest
+                from email_agentic.models.research import ResearchRequest
                 identity = ResearchRequest(company_name=company_name, domain=domain)
                 run = {**run, "company_name": identity.company_name, "domain": identity.domain}
                 await connection.execute(

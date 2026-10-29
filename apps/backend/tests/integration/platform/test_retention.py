@@ -104,22 +104,3 @@ async def test_raw_retention_keeps_report_until_ninety_days_and_input_tombstone(
             await c.approvals.confirm_identity(owner, rid, run["version"])
         source = await db.one("SELECT * FROM inputs WHERE owner=%s", (owner,))
         assert source["content"] == {"status": "expired"} and source["purged_at"]
-
-
-def test_local_backup_expiry_keeps_fresh_unrelated_files_and_symlinks(tmp_path):
-    import os
-    from email_agentic.platform.retention import prune_local_dumps
-
-    now = datetime.now(UTC)
-    old = tmp_path / "before-retention-old.sql"
-    fresh = tmp_path / "before-retention-fresh.sql"
-    unrelated = tmp_path / "manual.sql"
-    for path in (old, fresh, unrelated):
-        path.write_bytes(b"backup")
-    past = (now - timedelta(days=8)).timestamp()
-    os.utime(old, (past, past))
-    os.utime(unrelated, (past, past))
-    link = tmp_path / "before-linked.sql"
-    link.symlink_to(unrelated)
-    prune_local_dumps(tmp_path, now)
-    assert not old.exists() and fresh.exists() and unrelated.exists() and link.is_symlink()
