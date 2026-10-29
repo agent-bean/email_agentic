@@ -381,6 +381,8 @@ export interface components {
             source_email?: string | null;
             /** Source Input Id */
             source_input_id?: string | null;
+            /** Source Meeting Id */
+            source_meeting_id?: string | null;
         };
         /** RunDetail */
         RunDetail: {
@@ -446,6 +448,12 @@ export interface components {
             source_input_id?: string | null;
             /** Source Message */
             source_message?: {
+                [key: string]: unknown;
+            } | null;
+            /** Source Meeting Id */
+            source_meeting_id?: string | null;
+            /** Source Meeting */
+            source_meeting?: {
                 [key: string]: unknown;
             } | null;
         };

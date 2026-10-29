@@ -102,6 +102,8 @@ def make_graph(container, checkpointer):
 
     async def gather(state):
         run = await run_record(state)
+        await c.research.validate_meeting(run)
+        await c.research.status(run['id'], 'running')
         definitions = [
             ("company", CompanyInfoAgent(c.tools), "company:read"),
             ("memory", MemoryAgent(c.tools), "memory:read"),
@@ -161,6 +163,7 @@ def make_graph(container, checkpointer):
 
     async def report(state):
         run = await run_record(state)
+        await c.research.validate_meeting(run)
         existing = await c.db.one("SELECT id FROM reports WHERE run_id=%s LIMIT 1", (run["id"],))
         if existing:
             return {}

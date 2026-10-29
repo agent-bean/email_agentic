@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     local_client_hosts: str = "127.0.0.1,::1,testclient"
     scheduler_enabled: bool = False
     email_automation_enabled: bool = False
+    calendar_automation_enabled: bool = False
     email_automation_start_at: datetime | None = None
 
     @field_validator("email_automation_start_at", mode="before")

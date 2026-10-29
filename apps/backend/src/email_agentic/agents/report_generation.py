@@ -96,6 +96,7 @@ class ReportGenerationAgent:
                 "domain": run["domain"],
                 "context": run["context"],
                 "source_email": run.get("source_email"),
+                "source_meeting": run.get("source_meeting"),
                 "allowed_urls": [item["url"] for item in evidence],
                 "attachments": (run.get("source_message") or {}).get("attachments", []),
                 "as_of": datetime.now(UTC).date().isoformat(),

@@ -29,6 +29,8 @@ class RunRecord(RunSummary):
     source_email: str | None = None
     source_input_id: UUID | None = None
     source_message: dict | None = None
+    source_meeting_id: UUID | None = None
+    source_meeting: dict | None = None
 
 
 class ReportRow(BaseModel):
@@ -188,12 +190,20 @@ async def decide(
 
 @router.get("/inputs")
 async def inputs(request: Request, actor: Actor = Depends(authenticate)):
-    return await request.app.state.container.db.all(
-        """SELECT i.*,t.status AS intake_status,COALESCE(t.run_id,r.id) AS research_run_id FROM inputs i
+    rows = await request.app.state.container.db.all(
+        """SELECT i.*,COALESCE(t.status,ct.status) AS intake_status,COALESCE(t.run_id,r.id,ct.run_id) AS research_run_id,ct.revision AS meeting_revision FROM inputs i
         LEFT JOIN email_triage t ON t.input_id=i.id AND t.owner=i.owner
         LEFT JOIN research_runs r ON r.source_input_id=i.id AND r.owner=i.owner
+        LEFT JOIN LATERAL (SELECT status,run_id,revision FROM calendar_triage WHERE input_id=i.id AND owner=i.owner
+         ORDER BY created_at DESC LIMIT 1) ct ON true
         WHERE i.owner=%s ORDER BY COALESCE((i.content->>'received_at')::timestamptz,i.created_at) DESC LIMIT 100""", (actor.owner,)
     )
+
+    from email_agentic.integrations.calendar_event import revision
+    for row in rows:
+        if row['kind'] == 'meeting' and (row['calendar_available'] is False or row['meeting_revision'] != revision(row['content'])):
+            row['research_run_id'], row['intake_status'] = None, 'superseded'
+    return rows
 
 
 @router.get("/inputs/{input_id}")

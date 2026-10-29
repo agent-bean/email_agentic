@@ -1,11 +1,13 @@
 import uuid
 from email_agentic.platform.errors import Conflict, NotFound
 from email_agentic.runtime.jobs import enqueue
+from email_agentic.integrations.calendar_event import eligible, revision
+from datetime import datetime, UTC
 
 
 class Approvals:
-    def __init__(self, db, companies):
-        self.db, self.companies = db, companies
+    def __init__(self, db, companies, timezone="Asia/Bangkok"):
+        self.db, self.companies, self.timezone = db, companies, timezone
 
     async def confirm_identity(self, owner, run_id, version, company_name=None, domain=None):
         async with self.db.transaction() as connection:
@@ -18,6 +20,14 @@ class Approvals:
                 raise NotFound()
             if run["status"] != "awaiting_identity" or run["version"] != version:
                 raise Conflict("Identity request changed")
+            if run.get('source_meeting_id'):
+                source = await (await connection.execute(
+                    "SELECT content,calendar_available FROM inputs WHERE id=%s AND owner=%s FOR SHARE",
+                    (run['source_meeting_id'], owner),
+                )).fetchone()
+                if not source or source['calendar_available'] is False or revision(source['content']) != run['source_meeting_revision'] or not eligible(
+                        source['content'], owner, datetime.now(UTC), self.timezone):
+                    raise Conflict("Meeting changed or is no longer upcoming; synchronize Calendar and review its current proposal")
             if company_name is not None:
                 from email_agentic.domains.research.service import ResearchRequest
                 identity = ResearchRequest(company_name=company_name, domain=domain)

@@ -1,9 +1,12 @@
 import uuid
+import json
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from psycopg.types.json import Jsonb
 
 from email_agentic.platform.errors import Conflict, NotFound
 from email_agentic.runtime.jobs import enqueue
+from email_agentic.integrations.calendar_event import eligible, revision
+from datetime import datetime, UTC
 
 
 class ResearchRequest(BaseModel):
@@ -13,6 +16,7 @@ class ResearchRequest(BaseModel):
     context: str = Field("", max_length=12000)
     source_email: str | None = Field(None, min_length=1, max_length=30000)
     source_input_id: uuid.UUID | None = None
+    source_meeting_id: uuid.UUID | None = None
 
     @field_validator("source_email")
     @classmethod
@@ -61,7 +65,27 @@ class ResearchService:
             if old:
                 return old["entity_id"]
             source = None
+            meeting, meeting_key = None, None
             source_email = request.source_email
+            if request.source_meeting_id:
+                if request.source_input_id or source_email is not None:
+                    raise Conflict("Choose one original source: meeting or email")
+                row = await (await connection.execute(
+                    "SELECT content,calendar_available FROM inputs WHERE id=%s AND owner=%s AND kind='meeting' AND provider='google' FOR UPDATE",
+                    (request.source_meeting_id, owner),
+                )).fetchone()
+                if not row or row['calendar_available'] is False or not eligible(row['content'], owner, datetime.now(UTC), self.settings.app_timezone):
+                    raise Conflict("Meeting is cancelled, declined, expired or outside the preparation window")
+                meeting = row['content']
+                if len(json.dumps(meeting)) > 30000:
+                    raise Conflict('Meeting source exceeds the supported size')
+                meeting_key = revision(meeting)
+                previous = await (await connection.execute(
+                    "SELECT id FROM research_runs WHERE owner=%s AND source_meeting_id=%s AND source_meeting_revision=%s",
+                    (owner, request.source_meeting_id, meeting_key),
+                )).fetchone()
+                if previous:
+                    return previous['id']
             if request.source_input_id:
                 if request.source_email is not None:
                     raise Conflict("Choose a Gmail source or manual email text, not both")
@@ -86,10 +110,12 @@ class ResearchService:
                         raise Conflict("This email already has a research run for a different company")
                     return previous["id"]
             await connection.execute(
-                """INSERT INTO research_runs(id,owner,company_name,domain,context,source_email,config,source_input_id,source_message)
-                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                """INSERT INTO research_runs(id,owner,company_name,domain,context,source_email,config,source_input_id,source_message,
+                source_meeting_id,source_meeting,source_meeting_revision)
+                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                 (run_id, owner, request.company_name, request.domain, request.context,
-                 source_email, Jsonb(config), request.source_input_id, Jsonb(source) if source else None),
+                 source_email, Jsonb(config), request.source_input_id, Jsonb(source) if source else None,
+                 request.source_meeting_id, Jsonb(meeting) if meeting else None, meeting_key),
             )
             await enqueue(connection, owner, "research", run_id, f"request:{owner}:{key}")
         return run_id
@@ -99,6 +125,15 @@ class ResearchService:
         if not row:
             raise NotFound()
         return row
+
+    async def validate_meeting(self, run):
+        if not run.get('source_meeting_id'):
+            return
+        row = await self.db.one('SELECT content,calendar_available FROM inputs WHERE id=%s AND owner=%s',
+                                (run['source_meeting_id'], run['owner']))
+        if not row or row['calendar_available'] is False or revision(row['content']) != run['source_meeting_revision'] or not eligible(
+                row['content'], run['owner'], datetime.now(UTC), self.settings.app_timezone):
+            raise Conflict('Source meeting changed or is no longer upcoming')
 
     async def status(self, run_id, status, error=None):
         await self.db.execute(

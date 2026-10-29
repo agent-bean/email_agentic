@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { api, post, type Run, type ResearchInput } from '../lib/api';
 import { ErrorMessage, Status } from '../components/status';
-import { Attachments, type SourceInput } from './inbox';
+import { Attachments, MeetingSource, type SourceInput } from './inbox';
 
 export function Overview() {
   const query = useQuery({ queryKey: ['runs'], queryFn: () => api<Run[]>('/runs'), refetchInterval: 5000 });
@@ -22,13 +22,13 @@ export function NewResearch() {
   const source = useQuery({ queryKey: ['input', sourceId], queryFn: () => api<SourceInput>(`/inputs/${sourceId}`), enabled: Boolean(sourceId) });
   const submission = useRef({ body: '', key: '' });
   const [input, setInput] = useState<ResearchInput>({ company_name: '', domain: '', context: '' });
-  const mutation = useMutation({ mutationFn: () => { const payload = sourceId ? { ...input, source_input_id: sourceId } : input; const body = JSON.stringify(payload); if (submission.current.body !== body) submission.current = { body, key: crypto.randomUUID() }; return post<{ id: string }>('/runs', payload, submission.current.key); }, onSuccess: value => navigate(`/research/${value.id}`) });
+  const mutation = useMutation({ mutationFn: () => { const payload = sourceId ? { ...input, ...(source.data?.kind === 'meeting' ? {source_meeting_id: sourceId} : {source_input_id: sourceId}) } : input; const body = JSON.stringify(payload); if (submission.current.body !== body) submission.current = { body, key: crypto.randomUUID() }; return post<{ id: string }>('/runs', payload, submission.current.key); }, onSuccess: value => navigate(`/research/${value.id}`) });
   return <><header><div><p className="eyebrow">NGHIÊN CỨU DOANH NGHIỆP</p><h1>Nghiên cứu mới</h1><p className="muted">Xác nhận đúng doanh nghiệp, rồi thu thập thông tin có nguồn.</p></div></header>
     <form className="panel form" onSubmit={event => { event.preventDefault(); mutation.mutate(); }}>
       <label>Tên doanh nghiệp<input required minLength={2} maxLength={200} value={input.company_name} onChange={e => setInput({ ...input, company_name: e.target.value })} placeholder="Ví dụ: FPT Software" /></label>
       <label>Domain chính thức<input required value={input.domain} onChange={e => setInput({ ...input, domain: e.target.value })} placeholder="fptsoftware.com" /><small>Chỉ nhập domain, không có https:// hoặc đường dẫn.</small></label>
-      {sourceId ? <section><h2>Email từ Gmail</h2><ErrorMessage error={source.error} />{source.isPending ? <p role="status">Đang tải email…</p> : source.data && <><pre className="preserve">{source.data.content.source_text}</pre><Attachments items={source.data.content.attachments ?? []} /><p className="muted">Ứng dụng giữ nội dung và thread của email này. Nhập đúng doanh nghiệp cần nghiên cứu ở phía trên.</p></>}</section> : <label>Email gốc (không bắt buộc)<textarea rows={8} maxLength={30000} value={input.source_email ?? ''} onChange={e => setInput({ ...input, source_email: e.target.value === '' ? null : e.target.value })} placeholder="Dán nguyên văn email khách gửi, gồm tiêu đề và nội dung…" /><small>Để chọn email trực tiếp từ Gmail, mở trang Email & cuộc họp.</small></label>}
+      {sourceId ? <section><h2>{source.data?.kind === 'meeting' ? 'Cuộc họp từ Google Calendar' : 'Email từ Gmail'}</h2><ErrorMessage error={source.error} />{source.isPending ? <p role="status">Đang tải nguồn…</p> : source.data && <>{source.data.kind === 'meeting' ? <MeetingSource event={source.data.content} /> : <pre className="preserve">{source.data.content.source_text}</pre>}<Attachments items={source.data.content.attachments ?? []} /><p className="muted">Ứng dụng giữ nguyên nguồn đã chọn. Nhập đúng doanh nghiệp cần nghiên cứu ở phía trên.</p></>}</section> : <label>Email gốc (không bắt buộc)<textarea rows={8} maxLength={30000} value={input.source_email ?? ''} onChange={e => setInput({ ...input, source_email: e.target.value === '' ? null : e.target.value })} placeholder="Dán nguyên văn email khách gửi, gồm tiêu đề và nội dung…" /><small>Để chọn email trực tiếp từ Gmail, mở trang Email & cuộc họp.</small></label>}
       <label>Yêu cầu nghiên cứu (không bắt buộc)<textarea rows={5} maxLength={12000} value={input.context ?? ''} onChange={e => setInput({ ...input, context: e.target.value })} placeholder="Cần tìm hiểu gì về doanh nghiệp? Mục tiêu cuộc trao đổi là gì?" /><small>Hướng dẫn riêng cho trợ lý; không phải lời khách gửi trong email.</small></label>
-      <ErrorMessage error={mutation.error} /><button disabled={mutation.isPending || Boolean(sourceId && (!source.data || source.data.kind !== 'email'))}>{mutation.isPending ? 'Đang tạo…' : 'Tạo nghiên cứu'}</button>
+      <ErrorMessage error={mutation.error} /><button disabled={mutation.isPending || Boolean(sourceId && (!source.data || !['email', 'meeting'].includes(source.data.kind)))}>{mutation.isPending ? 'Đang tạo…' : 'Tạo nghiên cứu'}</button>
     </form></>;
 }

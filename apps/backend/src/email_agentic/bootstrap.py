@@ -11,6 +11,7 @@ from email_agentic.domains.inbox.service import Inbox
 from email_agentic.domains.inbox.drafts import GmailDrafts
 from email_agentic.domains.inbox.automation import EmailAutomation
 from email_agentic.domains.inbox.sync import GmailSync
+from email_agentic.domains.inbox.calendar import CalendarAutomation
 from email_agentic.domains.knowledge.service import Knowledge
 from email_agentic.domains.publication.service import Publication
 from email_agentic.domains.reports.service import Reports
@@ -75,6 +76,7 @@ class Container:
     google: Google
     drafts: GmailDrafts
     email_automation: EmailAutomation
+    calendar_automation: CalendarAutomation
 
 
 @asynccontextmanager
@@ -191,7 +193,7 @@ async def build_container(settings):
             Jobs(db),
             research,
             Reports(db, knowledge),
-            Approvals(db, companies),
+            Approvals(db, companies, settings.app_timezone),
             publication,
             knowledge,
             companies,
@@ -201,6 +203,7 @@ async def build_container(settings):
             google,
             drafts,
             EmailAutomation(db, research, llm, settings),
+            CalendarAutomation(db, research, llm, settings),
         )
         try:
             yield container

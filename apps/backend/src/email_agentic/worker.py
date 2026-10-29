@@ -62,18 +62,20 @@ class Worker:
             await c.tools.execute("email.read", {"retry_failed": job["dedupe_key"].startswith("manual-sync:")}, context)
         elif job["kind"] == "email_intake":
             await c.email_automation.run(job["owner"], job["entity_id"])
+        elif job["kind"] == "calendar_intake":
+            await c.calendar_automation.run(job["owner"], job["entity_id"])
         elif job["kind"] == "gmail_draft":
             context = ToolContext(job["owner"], "email", frozenset({"email:draft"}))
             await c.tools.execute("email.draft", {"action_id": str(job["entity_id"])}, context)
         elif job["kind"] == "scan_calendar":
             now = datetime.now(UTC)
             context = ToolContext(job["owner"], "scheduler", frozenset({"calendar:read"}))
-            for event in await c.tools.execute(
+            events = await c.tools.execute(
                 "calendar.list",
                 {"start": now.isoformat(), "end": (now + timedelta(days=7)).isoformat()},
                 context,
-            ):
-                await c.inbox.save(job["owner"], "google", event["id"], "meeting", event)
+            )
+            await c.calendar_automation.save(job["owner"], events)
         else:
             raise ValueError("Unknown job type")
 
@@ -110,6 +112,9 @@ class Worker:
                         "UPDATE email_triage SET status=%s,error_code=%s,updated_at=now() WHERE input_id=%s AND owner=%s",
                         ("queued" if retry else "failed", error, job["entity_id"], job["owner"]),
                     )
+                if job["kind"] == "calendar_intake":
+                    await self.c.db.execute("UPDATE calendar_triage SET status=%s,error_code=%s,updated_at=now() WHERE id=%s AND owner=%s",
+                                       ("queued" if retry else "failed", error, job["entity_id"], job["owner"]))
                 if job["kind"] in {"research", "resume"} and not retry:
                     await self.c.research.status(job["entity_id"], "failed", error)
                 JOBS.labels(job["kind"], "failed").inc()
@@ -167,7 +172,8 @@ class Worker:
                 tasks = {task for task in tasks if not task.done()}
                 if len(tasks) < 4:
                     job = await self.c.jobs.claim(
-                        excluded=() if self.c.settings.email_automation_enabled else ("email_intake",)
+                        excluded=tuple(kind for kind, enabled in (("email_intake", self.c.settings.email_automation_enabled),
+                                    ("calendar_intake", self.c.settings.calendar_automation_enabled)) if not enabled)
                     )
                     if job:
                         task = asyncio.create_task(self.process(job))
