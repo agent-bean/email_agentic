@@ -1,0 +1,105 @@
+name: CI and VPS deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18-bookworm
+        env:
+          POSTGRES_USER: email_agentic
+          POSTGRES_DB: email_agentic_test
+          POSTGRES_PASSWORD: ci-only-password
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd 'pg_isready -U email_agentic -d email_agentic_test'
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: '0.13.6'
+          python-version: '3.13'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Install application dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libpango-1.0-0 libpangoft2-1.0-0 fonts-dejavu-core
+          uv sync --frozen --project apps/backend
+          npm ci --prefix apps/web --no-audit --no-fund
+      - name: Lint, typecheck and web build
+        run: |
+          make lint
+          make web-build
+          bash -n scripts/deploy-production.sh scripts/backup-production.sh scripts/retention-production.sh
+      - name: Build backend and web containers
+        run: |
+          docker build -f apps/backend/Dockerfile -t email-agentic-backend:ci .
+          docker build -f apps/web/Dockerfile -t email-agentic-web:ci .
+      - name: Back up and migrate isolated test database
+        env:
+          DATABASE_URL: postgresql://email_agentic:ci-only-password@127.0.0.1:5432/email_agentic_test
+        run: |
+          mkdir -p "$RUNNER_TEMP/db-backup"
+          docker run --rm --network host --user "$(id -u):$(id -g)" \
+            -e APP_ENV=test -e DATABASE_URL \
+            -v "$RUNNER_TEMP/db-backup:/data" email-agentic-backend:ci \
+            python -m email_agentic.platform.migrate --backup-dir /data
+      - name: Backend tests
+        env:
+          TEST_DATABASE_URL: postgresql://email_agentic:ci-only-password@127.0.0.1:5432/email_agentic_test
+        run: uv run --frozen --project apps/backend pytest apps/backend/tests -q
+      - name: Validate release packaging
+        run: python3 scripts/prepare-release.py --output "$RUNNER_TEMP/release"
+
+  deploy:
+    needs: verify
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: vps
+    permissions: {}
+    steps:
+      - name: Deploy tested commit through restricted SSH entry point
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_DEPLOY_SSH_KEY: ${{ secrets.VPS_DEPLOY_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+          RELEASE_ID: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          : "${VPS_HOST:?Missing host}" "${VPS_PORT:?Missing port}"
+          : "${VPS_DEPLOY_SSH_KEY:?Missing deploy key}" "${VPS_KNOWN_HOSTS:?Missing pinned host key}"
+          [[ "$RELEASE_ID" =~ ^[a-f0-9]{40}$ ]]
+          ssh_dir=$(mktemp -d)
+          trap 'rm -rf "$ssh_dir"' EXIT
+          chmod 700 "$ssh_dir"
+          printf '%s\n' "$VPS_DEPLOY_SSH_KEY" > "$ssh_dir/key"
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          chmod 600 "$ssh_dir/key" "$ssh_dir/known_hosts"
+          ssh -T -i "$ssh_dir/key" -p "$VPS_PORT" \
+            -o BatchMode=yes -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$ssh_dir/known_hosts" \
+            -o GlobalKnownHostsFile=/dev/null -o ConnectTimeout=15 \
+            -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
+            "deploy@$VPS_HOST" "sudo -n /usr/local/sbin/email-agentic-deploy $RELEASE_ID"

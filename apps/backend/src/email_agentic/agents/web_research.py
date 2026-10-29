@@ -11,7 +11,7 @@ class WebResearchAgent:
         self.providers = ("tavily", "duckduckgo") if duckduckgo_enabled else ("tavily",)
 
     async def run(self, run, context):
-        company = f'"{run["company_name"]}"'
+        company = run["company_name"]
         domain = run["domain"]
         # Only confirmed company identity enters public search, never email or meeting context.
         queries = [
@@ -19,6 +19,7 @@ class WebResearchAgent:
             ("products", f"{company} site:{domain} products platforms technology solutions", False),
             ("deployments", f"{company} case study customer deployment results implementation", False),
             ("partners", f"{company} strategic partnership technology partner agreement", False),
+            ("adoption", f"{company} {domain} digital transformation ERP CRM AI automation implementation", False),
             ("news", f"{company} {domain} announcements business technology investment", True),
         ]
         # Leave capacity for the calendar request in the parallel collection branch.
@@ -52,6 +53,14 @@ class WebResearchAgent:
         if not self.read_pages:
             return
         # Round-robin by search rank preserves coverage across research topics.
+        # Keep long search-provider page excerpts; spend page reads on missing content.
+        available = {}
+        for response in responses:
+            for item in response["results"]:
+                key = urldefrag(item.get("url", ""))[0].rstrip("/")
+                content = item.get("raw_content") or ""
+                if len(content.strip()) >= 6000 and len(content) > len(available.get(key, "")):
+                    available[key] = content
         selected = {}
         max_results = max((len(response["results"]) for response in responses), default=0)
         for rank in range(max_results):
@@ -60,7 +69,7 @@ class WebResearchAgent:
                     continue
                 item = response["results"][rank]
                 url = urldefrag(item.get("url", ""))[0].rstrip("/")
-                if url and url not in selected and len(selected) < self.read_pages:
+                if url and url not in available and url not in selected and len(selected) < self.read_pages:
                     selected[url] = item["url"]
 
         slots = asyncio.Semaphore(2)
@@ -88,6 +97,9 @@ class WebResearchAgent:
             for item in response["results"]:
                 key = urldefrag(item.get("url", ""))[0].rstrip("/")
                 result = reads.get(key, {"status": "not_selected"})
+                if key in available:
+                    result = {"status": "not_selected", "reason": "search_content_available"}
+                    item["raw_content"] = available[key]
                 item["page_read"] = {key: value for key, value in result.items() if key != "markdown"}
                 if result["status"] == "succeeded":
                     item["raw_content"] = result["markdown"]

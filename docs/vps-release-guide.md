@@ -15,7 +15,7 @@ Commit xong, chạy `python3 scripts/prepare-release.py`. Script chỉ đóng g�
 | `/etc/email-agentic` | Cấu hình thật, root đọc; tách khỏi source/archive, thư mục 700 và file 600. |
 | `/var/backups/email-agentic` | Dump DB và file private, quyền 700; upload mã hóa tới R2. |
 
-Chuyển archive qua SSH đã ghim host key; so SHA-256 trước giải nén. Google runtime token được chuyển riêng và mount read-only theo đường secret trong Compose; token seed, SSH key và Cloudflare API token không đi vào container. Cấu hình Tunnel thực tế cũng chuyển riêng, không nằm trong source public. Giữ user `deploy` không có Docker/sudo; lần đầu dùng tài khoản quản trị. Chưa cấp quyền CI triển khai.
+Chuyển archive qua SSH đã ghim host key; so SHA-256 trước giải nén. Google runtime token được chuyển riêng và mount read-only theo đường secret trong Compose; token seed, SSH key và Cloudflare API token không đi vào container. Cấu hình Tunnel thực tế cũng chuyển riêng, không nằm trong source public. User `deploy` không có Docker hoặc sudo tổng quát. CI chỉ gọi entry point root-owned giới hạn theo [hướng dẫn CI/CD](ci-guide.md); cài mới hoặc thay đổi entry point bằng tài khoản quản trị.
 
 ## Cấu hình production
 
@@ -61,4 +61,4 @@ Retention do [script](../scripts/retention-production.sh), [service](../infra/sy
 
 Rollback code: tắt retention timer nếu quay về release chưa hỗ trợ cleanup, dừng worker, chuyển `current` về release trước và dùng image mang đúng release ID, khởi chạy bằng `--no-build`; không xóa volume hoặc prune image trước khi ổn định. Chỉ làm vậy nếu schema tương thích. Khi không tương thích, backup trạng thái hiện tại rồi restore DB/app-data đồng bộ từ bản đã kiểm thử, đối chiếu các email đã gửi sau thời điểm backup trước khi chạy worker; không tự lặp các publication đã xảy ra. Bản triển khai đầu chưa có release trước để quay lại: dừng ứng dụng/connector, giữ volumes và backup để sửa.
 
-Tra log bằng `docker compose ... logs --tail 100 <service>`, cloudflared qua `journalctl -u cloudflared`; không xuất raw email/prompt/token ra log. Chi tiết account/host/credential nằm trong hướng dẫn vận hành riêng ở máy quản trị.
+Log deploy tự động nằm ở `/var/log/email-agentic-deploy/<commit>.log`, chỉ root đọc. Tra log ứng dụng bằng `docker compose ... logs --tail 100 <service>`, cloudflared qua `journalctl -u cloudflared`; không xuất raw email/prompt/token ra log. Chi tiết account/host/credential nằm trong hướng dẫn vận hành riêng ở máy quản trị.

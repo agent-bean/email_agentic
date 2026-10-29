@@ -105,9 +105,9 @@ async def test_two_providers_keep_partial_results_and_share_page_budget(failed_p
         {"company_name": "Company", "domain": "example.com",
          "context": "private request", "source_email": "private customer email"}, None
     )
-    assert len(tools.calls) == 10
-    assert len(results) == 10
-    assert len([r for r in results if r["status"] == "failed"]) == 5
+    assert len(tools.calls) == 12
+    assert len(results) == 12
+    assert len([r for r in results if r["status"] == "failed"]) == 6
     assert tools.reads == ["https://example.com/shared"]
     assert all(r["provider"] == failed_provider for r in results if r["status"] == "failed")
 

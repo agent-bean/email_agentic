@@ -169,6 +169,8 @@ class Worker:
             while not self.stopping.is_set():
                 await self.c.jobs.recover()
                 await self.schedule()
+                if self.stopping.is_set():
+                    break
                 tasks = {task for task in tasks if not task.done()}
                 if len(tasks) < 4:
                     job = await self.c.jobs.claim(
@@ -182,8 +184,11 @@ class Worker:
                 with suppress(TimeoutError):
                     await asyncio.wait_for(self.stopping.wait(), 1)
         finally:
-            for task in tasks:
-                task.cancel()
+            # SIGTERM stops new claims, then lets bounded in-flight jobs record receipts.
+            # Unexpected loop failures still cancel tasks and leave lease recovery intact.
+            if not self.stopping.is_set():
+                for task in tasks:
+                    task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
 
 

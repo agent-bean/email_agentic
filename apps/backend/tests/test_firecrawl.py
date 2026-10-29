@@ -133,7 +133,33 @@ async def test_new_run_records_page_limit_without_persisting_api_key(db):
         )
         run = await c.research.get(owner, run_id)
         assert run["config"]["firecrawl_max_pages"] == 4
-        assert run["config"]["workflow_version"] == 4
+        assert run["config"]["workflow_version"] == 5
         assert run["config"]["prompt_version"] == 10
         assert run["config"]["duckduckgo_enabled"] is True
         assert "test-only" not in json.dumps(run["config"])
+
+
+async def test_page_reads_prioritize_missing_content_and_preserve_existing_search_excerpts():
+    class Pages:
+        urls = []
+
+        async def execute(self, name, request, context):
+            self.urls.append(request["url"])
+            return {"markdown": "Additional page content"}
+
+    tools = Pages()
+    long_content = "Useful source details " * 400
+    responses = [{"results": [
+        {"url": "https://example.com/rich", "content": "First short duplicate"},
+        {"url": "https://example.com/missing", "content": "Search excerpt"},
+        {"url": "https://example.com/rich#section", "raw_content": long_content},
+    ]}]
+    await WebResearchAgent(tools, read_pages=1).read_sources(responses, None)
+    assert tools.urls == ["https://example.com/missing"]
+    rich, missing, duplicate = responses[0]["results"]
+    assert rich["raw_content"] == long_content
+    assert rich["page_read"] == duplicate["page_read"] == {
+        "status": "not_selected", "reason": "search_content_available",
+    }
+    assert missing["raw_content"] == "Additional page content"
+    assert missing["content"] == "Search excerpt"
