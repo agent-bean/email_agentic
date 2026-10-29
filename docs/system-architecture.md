@@ -1,6 +1,6 @@
 # Kiến trúc Email Assistant
 
-**Trạng thái:** Kiến trúc đã được chủ sản phẩm chốt, dùng `domains/` cho nghiệp vụ. Đã dựng nền tảng local; các mục bên dưới mô tả kiến trúc đích, không đồng nghĩa mọi tính năng đã hoàn tất. Chưa triển khai VPS hoặc nghiệm thu sáu ca.
+**Trạng thái:** Kiến trúc đã được chủ sản phẩm chốt, dùng `domains/` cho nghiệp vụ. Đã dựng nền tảng local; các mục bên dưới mô tả kiến trúc đích, không đồng nghĩa mọi tính năng đã hoàn tất. Ứng dụng đã chạy trên VPS; xem [hướng dẫn vận hành](vps-release-guide.md). Trạng thái từng phần bên dưới không thay thế nghiệm thu toàn bộ PRD.
 
 Ứng dụng phục vụ một người dùng, một hộp thư và một lịch: thu thập đầu vào, nghiên cứu doanh nghiệp, tạo báo cáo và chờ duyệt trước phát hành. [PRD](project-overview-pdr.md) sở hữu phạm vi; [quy tắc xử lý](technical-contracts.md) sở hữu dữ liệu/quyền/phục hồi; checklist setup riêng (xem danh mục tài liệu) sở hữu cấu hình và trạng thái tài nguyên thật. Báo cáo nghiên cứu local trong `plans/reports/` giải thích căn cứ và phương án đã loại.
 
@@ -30,7 +30,7 @@ flowchart TB
     R -.-> O
 ```
 
-Model chạy qua gateway, không chạy trên VPS. Triển khai Docker Compose trên VPS 4 CPU/8 GB theo tài nguyên người dùng cung cấp; dung lượng sử dụng thực phải đo. Cloudflared chạy trên host theo cấu hình đã chuẩn bị, chuyển vào app loopback 8000 và Grafana loopback 3000; DB/telemetry backend chỉ ở mạng nội bộ. DNS/Access/credential đã chuẩn bị; connector và ứng dụng chưa triển khai. Không đọc lại secret để thiết kế.
+Model chạy qua gateway, không chạy trên VPS. Triển khai Docker Compose trên VPS 4 CPU/8 GB theo tài nguyên người dùng cung cấp; dung lượng sử dụng thực phải đo. Cloudflared chạy trên host theo cấu hình đã chuẩn bị, chuyển vào app loopback 8000 và Grafana loopback 3000; DB/telemetry backend chỉ ở mạng nội bộ. Connector và ứng dụng đã chạy; đường vận hành xem [hướng dẫn VPS](vps-release-guide.md). Không đọc lại secret để thiết kế.
 
 ## 2. Source code và trách nhiệm
 
@@ -211,8 +211,8 @@ Còn phải kiểm chứng khi triển khai: tương thích package/gateway, ren
 
 ## 10. Nền tảng hiện có và phần còn lại
 
-Source đã có React, API/worker, migration có backup, queue PostgreSQL, checkpoint LangGraph, bảy vai trò và tool harness. Luồng tạo nghiên cứu thủ công → xác nhận domain → thu thập thật → nháp → sửa/duyệt → outbox email/KB đã được nối trong source. Đã đọc Google/Tavily thật; bước tạo báo cáo dài chưa qua kiểm chứng gateway (timeout hoặc response chưa đạt schema). Chưa xác nhận toàn bộ luồng thực chạy thành công. Compose có Prometheus, Tempo, Grafana; chưa triển khai VPS.
+Source đã có React, API/worker, migration có backup, queue PostgreSQL, checkpoint LangGraph, bảy vai trò và tool harness. Luồng tạo nghiên cứu thủ công → xác nhận domain → thu thập thật → nháp → sửa/duyệt → outbox email/KB đã được nối trong source. Đã đọc Google/Tavily thật; bước tạo báo cáo dài chưa qua kiểm chứng gateway (timeout hoặc response chưa đạt schema). Chưa xác nhận toàn bộ luồng thực chạy thành công. Compose có Prometheus, Tempo, Grafana; đã triển khai VPS qua Cloudflare Access.
 
-Chưa coi là hoàn tất PRD: nhận diện/tự kích hoạt nghiên cứu từ email/lịch, Gmail history cursor, phân tích PDF, xuất PDF/Word và attachment bất biến, đối chiếu Sent trên UI, cleanup/retention và backup định kỳ. Luồng web dùng năm chủ đề cố định qua Tavily và DuckDuckGo; cấu hình/giới hạn hiện tại xem [hướng dẫn ứng dụng](application-guide.md). Luôn yêu cầu xác nhận danh tính. Đo thời gian hiện gồm cả lúc chờ xác nhận nên chưa dùng để chứng minh mục tiêu 42 giây. Trace hiện ở API/job/tool, chưa nối đầy đủ ngữ cảnh xuyên tiến trình.
+Chưa coi là hoàn tất PRD: nhận diện/tự kích hoạt nghiên cứu từ email/lịch, Gmail history cursor, phân tích PDF, xuất PDF/Word và attachment bất biến, đối chiếu Sent trên UI, cleanup/retention. Backup định kỳ do [script và systemd timer](vps-release-guide.md#backup-và-rollback) sở hữu. Luồng web dùng năm chủ đề cố định qua Tavily và DuckDuckGo; cấu hình/giới hạn hiện tại xem [hướng dẫn ứng dụng](application-guide.md). Luôn yêu cầu xác nhận danh tính. Đo thời gian hiện gồm cả lúc chờ xác nhận nên chưa dùng để chứng minh mục tiêu 42 giây. Trace hiện ở API/job/tool, chưa nối đầy đủ ngữ cảnh xuyên tiến trình.
 
 [Evals](evaluation-guide.md) nằm ngoài runtime: cases/fixture là đầu vào; golden riêng tư phải có người review và khóa trước chấm. Runner hiện hỗ trợ xuất/chấm lượt live; replay provider frozen còn phải triển khai. Không dùng kết quả live làm bằng chứng hồi quy frozen.

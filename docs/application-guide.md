@@ -101,6 +101,6 @@ Hợp đồng HTTP do [OpenAPI/Pydantic](../apps/backend/src/email_agentic/api/r
 
 Request LLM dùng ngân sách cấu hình tại [LLM integration](../apps/backend/src/email_agentic/integrations/llm.py), thay vì bị timeout mặc định của HTTP client cắt ngắn. Khi cấu hình riêng có ngân sách quá thấp, có thể chạy local bằng `RESEARCH_TIMEOUT_SECONDS=180 make up`; override không được lưu vào file cấu hình. Lỗi mạng từ provider vẫn có thể xảy ra và không chứng minh model thiếu hỗ trợ schema.
 
-Chưa hoàn tất: tự kích hoạt nghiên cứu từ email/lịch, Gmail history cursor, OCR cho PDF ảnh, xuất PDF/Word và attachment bất biến, UI đối chiếu Sent, cleanup/retention, backup định kỳ và trace xuyên tiến trình. Scheduler mặc định tắt; dữ liệu đồng bộ chưa tự trở thành nghiên cứu. Golden còn nháp và frozen replay chưa triển khai; xem [hướng dẫn eval](evaluation-guide.md).
+Chưa hoàn tất: tự kích hoạt nghiên cứu từ email/lịch, Gmail history cursor, OCR cho PDF ảnh, xuất PDF/Word và attachment bất biến, UI đối chiếu Sent, cleanup/retention và trace xuyên tiến trình. Backup VPS đã có script/systemd timer; xem [vận hành VPS](vps-release-guide.md#backup-và-rollback). Scheduler mặc định tắt; dữ liệu đồng bộ chưa tự trở thành nghiên cứu. Golden còn nháp và frozen replay chưa triển khai; xem [hướng dẫn eval](evaluation-guide.md).
 
 Tài liệu sản phẩm/kiến trúc được theo dõi trong Git. Checklist vận hành riêng và danh mục đường dẫn tài liệu gốc trên máy, cấu hình thật, golden và kết quả thử được giữ ngoài Git theo [.gitignore](../.gitignore).
