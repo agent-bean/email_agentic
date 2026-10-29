@@ -13,13 +13,16 @@ class GmailSync:
     def __init__(self, db, google, settings):
         self.db, self.google, self.settings = db, google, settings
 
-    async def run(self, owner):
+    async def run(self, owner, retry_failed=False):
         row = await self.db.one("SELECT cursor FROM sync_cursors WHERE owner=%s AND provider='gmail'", (owner,))
         old = row['cursor'] if row else None
         cursor = json.loads(old) if old else None
         known = {row['source_id'] for row in await self.db.all('''SELECT source_id FROM inputs
             WHERE owner=%s AND provider='google' AND kind='email' AND content->>'status'='succeeded' ''', (owner,))}
-        messages, next_cursor, more = await self.google.sync_inbox(cursor, known)
+        retry_ids = [row['source_id'] for row in await self.db.all('''SELECT source_id FROM inputs
+            WHERE owner=%s AND provider='google' AND kind='email' AND content->>'status'='read_failed'
+            ORDER BY created_at LIMIT 50''', (owner,))] if retry_failed else []
+        messages, next_cursor, more = await self.google.sync_inbox(cursor, known, retry_ids)
         encoded = json.dumps(next_cursor, sort_keys=True)
         async with self.db.transaction() as connection:
             await connection.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s,0))', (f'gmail-sync:{owner}',))

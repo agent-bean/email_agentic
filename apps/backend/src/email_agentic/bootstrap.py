@@ -30,6 +30,10 @@ class Empty(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class ReadInbox(Empty):
+    retry_failed: bool = False
+
+
 class Domain(Empty):
     domain: str = Field(min_length=3, max_length=253)
 
@@ -105,7 +109,7 @@ async def build_container(settings):
             return await firecrawl.scrape(request.url, request.timeout_seconds)
 
         async def read_email(request, context):
-            return await GmailSync(db, google, settings).run(context.owner)
+            return await GmailSync(db, google, settings).run(context.owner, request.retry_failed)
 
         async def create_draft(request, context):
             report = await drafts.package(context.owner, request.action_id)
@@ -163,7 +167,7 @@ async def build_container(settings):
             ("calendar.list", CalendarWindow, "calendar:read", {"calendar", "scheduler"}, calendar),
             ("web.search", Search, "web:read", {"web"}, search),
             ("web.scrape", Scrape, "web:read", {"web"}, scrape),
-            ("email.read", Empty, "email:read", {"email", "scheduler"}, read_email),
+            ("email.read", ReadInbox, "email:read", {"email", "scheduler"}, read_email),
             ("email.draft", Action, "email:draft", {"email"}, create_draft),
             ("email.send", Action, "publication:execute", {"publication"}, publish),
             ("knowledge.publish", Action, "publication:execute", {"publication"}, publish),

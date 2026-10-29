@@ -106,7 +106,7 @@ class Google:
                     break
         return messages
 
-    async def sync_inbox(self, cursor, known=()):
+    async def sync_inbox(self, cursor, known=(), retry_ids=()):
         """Read one page; the caller persists its cursor with inputs and follow-up jobs."""
         profile = await self.call("gmail", "GET", "gmail/v1/users/me/profile")
         if profile.get("emailAddress", "").casefold() != self.settings.owner_email.casefold():
@@ -123,7 +123,7 @@ class Google:
             except ProviderFailure as exc:
                 if exc.category != "http_404":
                     raise
-                return await self.sync_inbox(None, known)
+                return await self.sync_inbox(None, known, retry_ids)
             ids = []
             for event in response.get("history", []):
                 for change in event.get("messagesAdded", []):
@@ -140,7 +140,7 @@ class Google:
             response = await self.call("gmail", "GET", "gmail/v1/users/me/messages", params=params)
             ids = [item["id"] for item in response.get("messages", [])]
         messages = []
-        for message_id in dict.fromkeys(ids):
+        for message_id in dict.fromkeys([*ids, *retry_ids]):
             if message_id in known:
                 continue
             try:
@@ -149,6 +149,9 @@ class Google:
             except ProviderFailure as exc:
                 if exc.category == "http_404":
                     continue  # Deleted during synchronization; it is no longer actionable.
+                if exc.category == "http_403" and not exc.transient:
+                    messages.append({"id": message_id, "status": "read_failed", "error_code": "gmail:http_403"})
+                    continue
                 raise
             if "INBOX" not in item.get("labelIds", ["INBOX"]):
                 continue

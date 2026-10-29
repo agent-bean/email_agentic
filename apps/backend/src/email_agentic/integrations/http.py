@@ -20,11 +20,24 @@ async def json_request(client, provider, method, url, deadline_seconds=45, **kwa
             category="network_or_timeout",
         ) from None
     if response.is_error:
+        category = f"http_{response.status_code}"
+        rate_limited = False
+        if provider == "gmail" and response.status_code == 403:
+            try:
+                reasons = {item.get("reason") for item in response.json()["error"]["errors"]}
+            except (AttributeError, KeyError, TypeError, ValueError):
+                reasons = set()
+            rate_limited = bool(reasons & {"rateLimitExceeded", "userRateLimitExceeded"})
+            for reason, label in (("dailyLimitExceeded", "daily_limit"),
+                                  ("domainPolicy", "domain_policy"),
+                                  ("insufficientPermissions", "permissions")):
+                if reason in reasons:
+                    category = label
         raise ProviderFailure(
             provider,
-            transient=response.status_code in {408, 429, 500, 502, 503, 504},
+            transient=rate_limited or response.status_code in {408, 429, 500, 502, 503, 504},
             ambiguous=provider == "gmail" and method == "POST" and response.status_code >= 500,
-            category=f"http_{response.status_code}",
+            category=category,
         )
     try:
         return response.json()

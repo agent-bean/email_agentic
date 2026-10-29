@@ -234,3 +234,41 @@ async def test_email_automation_disabled_preserves_pending_intake_jobs(db):
     assert await Jobs(db).claim(['email_intake'], excluded=('email_intake',)) is None
     row = await db.one('SELECT status,attempt FROM jobs WHERE owner=%s', (owner,))
     assert row == {'status': 'pending', 'attempt': 0}
+
+
+@pytest.mark.parametrize('reason,retry', [('userRateLimitExceeded', True), ('rateLimitExceeded', True), ('forbidden', False)])
+async def test_gmail_sync_distinguishes_rate_limits_from_unreadable_message(reason, retry):
+    def respond(request):
+        if request.url.path.endswith('/profile'):
+            return httpx.Response(200, json={'emailAddress': 'owner@example.org', 'historyId': '500'})
+        if request.url.path.endswith('/messages'):
+            return httpx.Response(200, json={'messages': [{'id': 'denied'}, {'id': 'readable'}]})
+        if request.url.path.endswith('/denied'):
+            return httpx.Response(403, json={'error': {'errors': [{'reason': reason}]}})
+        return httpx.Response(200, json=response_message())
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        google = Google(client, SimpleNamespace(owner_email='owner@example.org'))
+        google.token = lambda: 'test-only'
+        if retry:
+            with pytest.raises(ProviderFailure) as error:
+                await google.sync_inbox(None)
+            assert error.value.transient is True
+        else:
+            rows, cursor, more = await google.sync_inbox(None)
+            assert rows[0]['status'] == 'read_failed' and rows[1]['status'] == 'succeeded'
+            assert not more and cursor['mode'] == 'history'
+
+
+async def test_gmail_sync_retries_failed_message_even_without_new_history():
+    def respond(request):
+        if request.url.path.endswith('/profile'):
+            return httpx.Response(200, json={'emailAddress': 'owner@example.org', 'historyId': '500'})
+        if request.url.path.endswith('/history'):
+            return httpx.Response(200, json={'historyId': '501'})
+        assert request.url.path.endswith('/retry')
+        return httpx.Response(200, json=response_message())
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        google = Google(client, SimpleNamespace(owner_email='owner@example.org'))
+        google.token = lambda: 'test-only'
+        rows, _, _ = await google.sync_inbox({'mode': 'history', 'history_id': '500'}, retry_ids=['retry'])
+        assert len(rows) == 1 and rows[0]['status'] == 'succeeded'

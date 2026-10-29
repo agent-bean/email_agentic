@@ -59,7 +59,7 @@ class Worker:
             await c.tools.execute(name, {"action_id": str(action["id"])}, context)
         elif job["kind"] == "scan_email":
             context = ToolContext(job["owner"], "scheduler", frozenset({"email:read"}))
-            await c.tools.execute("email.read", {}, context)
+            await c.tools.execute("email.read", {"retry_failed": job["dedupe_key"].startswith("manual-sync:")}, context)
         elif job["kind"] == "email_intake":
             await c.email_automation.run(job["owner"], job["entity_id"])
         elif job["kind"] == "gmail_draft":
