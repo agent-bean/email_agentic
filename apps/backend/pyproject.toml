@@ -41,6 +41,12 @@ build-backend = "hatchling.build"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
+addopts = "--import-mode=importlib --strict-markers"
+markers = [
+    "unit: isolated domain, adapter, model, or evaluation behavior",
+    "integration: real PostgreSQL, document engine, or process integration",
+    "e2e: application journeys through the public API with real persistence",
+]
 
 [tool.ruff]
 line-length = 110

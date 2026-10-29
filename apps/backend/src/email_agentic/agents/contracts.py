@@ -1,19 +1,2 @@
-from pydantic import BaseModel, ConfigDict, Field
-
-
-class StrictModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
-class Draft(StrictModel):
-    markdown: str = Field(min_length=1, max_length=100000)
-    email_subject: str = Field(min_length=1, max_length=200, pattern=r"^[^\r\n]+$")
-    email_body: str = Field(min_length=1, max_length=30000)
-
-
-class BranchResult(StrictModel):
-    role: str
-    status: str
-    facts: list[dict] = Field(default_factory=list)
-    missing: list[str] = Field(default_factory=list)
-    error_code: str | None = None
+"""Compatibility exports; agent contracts are owned by the models layer."""
+from email_agentic.models.agents import BranchResult as BranchResult, Draft as Draft, StrictModel as StrictModel

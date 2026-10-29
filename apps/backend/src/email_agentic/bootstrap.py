@@ -1,10 +1,17 @@
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from uuid import UUID
-from typing import Literal
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field
+from email_agentic.models.tools import (
+    Empty as Empty,
+    ReadInbox as ReadInbox,
+    Domain as Domain,
+    Search as Search,
+    CalendarWindow as CalendarWindow,
+    Scrape as Scrape,
+    Action as Action,
+)
+
 from email_agentic.domains.approvals.service import Approvals
 from email_agentic.domains.companies.service import Companies
 from email_agentic.domains.inbox.service import Inbox
@@ -25,38 +32,6 @@ from email_agentic.platform.database import Database
 from email_agentic.platform.errors import ProviderFailure
 from email_agentic.runtime.jobs import Jobs
 from email_agentic.tools.harness import Tool, ToolExecutor
-
-
-class Empty(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
-class ReadInbox(Empty):
-    retry_failed: bool = False
-
-
-class Domain(Empty):
-    domain: str = Field(min_length=3, max_length=253)
-
-
-class Search(Empty):
-    query: str = Field(min_length=2, max_length=1000)
-    news: bool = False
-    provider: Literal["tavily", "duckduckgo"] = "tavily"
-
-
-class CalendarWindow(Empty):
-    start: str
-    end: str
-
-
-class Scrape(Empty):
-    url: str = Field(min_length=8, max_length=4000)
-    timeout_seconds: float = Field(15, ge=1, le=15)
-
-
-class Action(Empty):
-    action_id: UUID
 
 
 @dataclass

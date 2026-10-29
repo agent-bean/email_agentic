@@ -1,109 +1,30 @@
 import asyncio
-from datetime import datetime
 from uuid import UUID
 
 from fastapi.responses import Response
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from email_agentic.domains.reports.service import ReportEdit
-from email_agentic.domains.research.service import ResearchRequest
+from email_agentic.models.api import (
+    RunSummary as RunSummary,
+    RunRecord as RunRecord,
+    ReportRow as ReportRow,
+    ApprovalRow as ApprovalRow,
+    ActionRow as ActionRow,
+    RunDetail as RunDetail,
+    Created as Created,
+    Decision as Decision,
+    IdentityDecision as IdentityDecision,
+    IdentityConfirmation as IdentityConfirmation,
+    SentReviewRow as SentReviewRow,
+    SentVerification as SentVerification,
+)
+
+from email_agentic.models.reports import ReportEdit
+from email_agentic.models.research import ResearchRequest
 from email_agentic.platform.auth import Actor, authenticate
 from email_agentic.runtime.jobs import enqueue
 
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(authenticate)])
-
-
-class RunSummary(BaseModel):
-    id: UUID
-    company_name: str
-    domain: str
-    context: str
-    status: str
-    version: int
-    created_at: datetime
-    elapsed_seconds: float | None
-    error_code: str | None
-    config: dict
-
-
-class RunRecord(RunSummary):
-    raw_purged_at: datetime | None = None
-    history_purged_at: datetime | None = None
-    source_email: str | None = None
-    source_input_id: UUID | None = None
-    source_message: dict | None = None
-    source_meeting_id: UUID | None = None
-    source_meeting: dict | None = None
-
-
-class ReportRow(BaseModel):
-    id: UUID
-    run_id: UUID
-    version: int
-    markdown: str
-    email_subject: str
-    email_body: str
-    recipients: dict[str, list[str]]
-    send_email: bool
-    save_kb: bool
-    quality: dict
-    artifacts: list[dict]
-
-
-class ApprovalRow(BaseModel):
-    id: UUID
-    report_id: UUID
-    status: str
-    expires_at: datetime
-
-
-class ActionRow(BaseModel):
-    id: UUID
-    kind: str
-    status: str
-    provider_id: str | None
-    error_code: str | None
-
-
-class RunDetail(BaseModel):
-    run: RunRecord
-    reports: list[ReportRow]
-    approvals: list[ApprovalRow]
-    actions: list[ActionRow]
-    branches: list[dict]
-    evidence: list[dict]
-    usage: list[dict]
-    gmail_drafts: list[dict]
-    gmail_drafts_available: bool
-
-
-class Created(BaseModel):
-    id: UUID
-
-
-class Decision(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    approve: bool
-
-
-class IdentityDecision(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    version: int = Field(ge=1)
-
-
-class IdentityConfirmation(IdentityDecision):
-    company_name: str | None = None
-    domain: str | None = None
-
-    @model_validator(mode="after")
-    def validate_proposal(self):
-        if (self.company_name is None) != (self.domain is None):
-            raise ValueError("Provide both company name and domain")
-        if self.company_name is not None:
-            identity = ResearchRequest(company_name=self.company_name, domain=self.domain)
-            self.company_name, self.domain = identity.company_name, identity.domain
-        return self
 
 
 @router.get("/me")
@@ -292,24 +213,6 @@ async def download_file(file_id: UUID, request: Request, inline: bool = False, a
     return Response(content=bytes(row['data']), media_type=row['mime_type'], headers={
         'Content-Disposition': f'{"inline" if inline and row["format"] == "pdf" else "attachment"}; filename="{row["filename"]}"', 'Cache-Control': 'private, no-store',
         'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "sandbox; default-src 'none'"})
-
-
-class SentReviewRow(BaseModel):
-    id: UUID
-    run_id: UUID
-    version: int
-    email_subject: str
-    email_body: str
-    recipients: dict[str, list[str]]
-    status: str
-    provider_id: str | None
-    error_code: str | None
-    created_at: datetime
-
-
-class SentVerification(BaseModel):
-    verification: str
-    provider_id: str | None
 
 
 @router.get("/sent-review", response_model=list[SentReviewRow])

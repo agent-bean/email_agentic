@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
   workflow_dispatch:
 
 permissions:
@@ -16,7 +17,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:18-bookworm
@@ -39,6 +40,9 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
+      - name: Validate pull request conventions
+        if: github.event_name == 'pull_request'
+        run: python3 scripts/check-pr-conventions.py
       - name: Install application dependencies
         run: |
           sudo apt-get update -qq
@@ -48,7 +52,9 @@ jobs:
       - name: Lint, typecheck and web build
         run: |
           make lint
+          make typecheck
           make web-build
+          make test-scripts
           bash -n scripts/deploy-production.sh scripts/backup-production.sh scripts/retention-production.sh
       - name: Build backend and web containers
         run: |
@@ -63,10 +69,25 @@ jobs:
             -e APP_ENV=test -e DATABASE_URL \
             -v "$RUNNER_TEMP/db-backup:/data" email-agentic-backend:ci \
             python -m email_agentic.platform.migrate --backup-dir /data
-      - name: Backend tests
+      - name: Backend unit tests
+        run: uv run --frozen --project apps/backend pytest apps/backend/tests/unit -q
+      - name: Backend integration and end-to-end tests
         env:
           TEST_DATABASE_URL: postgresql://email_agentic:ci-only-password@127.0.0.1:5432/email_agentic_test
-        run: uv run --frozen --project apps/backend pytest apps/backend/tests -q
+        run: |
+          uv run --frozen --project apps/backend pytest apps/backend/tests/integration -q --require-database
+          uv run --frozen --project apps/backend pytest apps/backend/tests/e2e -q --require-database
+      - name: Web unit and integration tests
+        run: |
+          npm run test:unit --prefix apps/web
+          npm run test:integration --prefix apps/web
+      - name: Install browser test runtime
+        working-directory: apps/web
+        run: npx --no-install playwright install --with-deps chromium
+      - name: Web browser end-to-end tests
+        env:
+          TEST_DATABASE_URL: postgresql://email_agentic:ci-only-password@127.0.0.1:5432/email_agentic_test
+        run: npm run test:e2e --prefix apps/web
       - name: Validate release packaging
         run: python3 scripts/prepare-release.py --output "$RUNNER_TEMP/release"
 

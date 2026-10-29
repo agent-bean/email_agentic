@@ -19,7 +19,7 @@ fi
 revision=$1
 [[ "$revision" =~ ^[a-f0-9]{40}$ ]] || { echo 'Invalid commit ID'; exit 1; }
 exec 9>/run/lock/email-agentic-deploy.lock
-flock -n 9 || { echo 'Another deployment is running'; exit 1; }
+flock -n 9 || { echo 'Deployment or retention is already running'; exit 1; }
 previous=$(readlink -f "$base/current")
 [[ "$previous" = "$base/releases/"* ]] && test -f "$previous/.release-id"
 install -d -m 700 "$base/source.git" /var/log/email-agentic-deploy

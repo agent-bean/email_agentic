@@ -1,22 +1,22 @@
-# Tham khảo giáo trình và code mẫu
+# Course Material and Sample Code
 
-Tài liệu gốc được tìm qua danh mục riêng `docs/references/02_private-source-catalog.md` trên máy quản trị. Giáo trình/code mẫu không phải thiết kế đã chọn hoặc bằng chứng hệ thống chạy thành công. [PRD](../02_product-requirements.md) sở hữu phạm vi; [kiến trúc](../04_architecture-and-safety.md) sở hữu quyết định hiện hành.
+Find original material through the private catalog at `docs/references/02_private-source-catalog.md` on the administrator's machine. Course material and samples are neither the chosen design nor evidence of successful execution. The [PRD](../02_product-requirements.md) owns scope; [architecture](../04_architecture-and-safety.md) owns current design decisions.
 
-## Chỉ đọc khi cần đối chiếu nguồn gốc
+## When to consult the originals
 
-Đề Email Assistant là nguồn yêu cầu. Các bài Tool Harness, Orchestration, Security/Governance, Evaluation và AgentOps giúp hiểu cơ sở thiết kế; ví dụ Drive, Fulfillment, coding agent và chăm sóc khách hàng không mở rộng nghiệp vụ Email Assistant.
+The Email Assistant assignment is the requirements source. Tool Harness, Orchestration, Security/Governance, Evaluation, and AgentOps lessons explain the design background. Drive, Fulfillment, coding-agent, and customer-service examples do not expand this product's business scope.
 
-Code mẫu có tool loop, Gmail/Calendar, RAG và telemetry để tham khảo, nhưng không tự đáp ứng bảy vai trò, phê duyệt đúng phiên bản hoặc gửi chống trùng. Gmail send trực tiếp trong mẫu phải được đặt sau quyền/duyệt; đổi prompt không tạo ranh giới an toàn. Tool tạo/sửa/xóa lịch hoặc trạng thái email trong mẫu không phải quyền mặc định của dự án.
+Sample tool loops, Gmail/Calendar integrations, RAG, and telemetry are references, not proof of compliance with required roles, version-bound approval, or duplicate-send protection. Direct Gmail sending in samples needs authorization and approval gates; a prompt change does not create a security boundary. Sample tools that create/change/delete calendar events or alter email state are not default project permissions.
 
-Registry mẫu có TODO về schema/auth/scopes/rate/audit hoặc chỉ lưu user/rate/audit trong RAM; không dùng làm bằng chứng về bảo vệ production. Một số mẫu dùng CRM mô phỏng. Cache/BM25 trong RAM không tự chứng minh memory bền vững sau restart. Ví dụ GraphRAG, vector DB, MCP/A2A và agent manager là lựa chọn tham khảo, chưa phải yêu cầu.
+Registry examples with schema/auth/scope/rate/audit TODOs or in-memory identity/rate/audit state do not prove production protection. Some examples use simulated CRM data. In-memory cache/BM25 does not establish durable memory across restarts. GraphRAG, vector databases, MCP/A2A, and agent managers remain options rather than requirements.
 
-Stack monitoring mẫu bật anonymous Admin không phù hợp demo công khai; port/model/giá trong slide không là cấu hình hiện hành. Không giải nén nguyên bộ mẫu vào repo: một số archive có dotenv/token, không đọc hoặc tái sử dụng credential từ đó. Inventory, nhận xét từng file và kết quả kiểm tra tĩnh thuộc báo cáo nghiên cứu, không phải hướng dẫn vận hành.
+Anonymous Admin access in a sample monitoring stack is unsuitable for a public demo. Slide ports, models, and prices are not current configuration. Do not unpack entire sample archives into the repository: some contain dotenv files or tokens, whose credentials must not be read or reused. File inventories and static inspection results belong in research reports, not the operating guide.
 
-## Các bẫy khi dùng công thức đánh giá
+## Evaluation interpretation traps
 
-- Hit@K kiểm có ít nhất một kết quả đúng; Recall@K tính tỷ lệ mục đúng tìm thấy trên toàn bộ mục liên quan. Chúng chỉ trùng khi mỗi query có một mục đúng.
-- Slide Evaluation S23 có phép chia `4 / 6 = 0.5` sai; kết quả đúng khoảng 0.667. Nhãn Context Relevance/Recall và Precision/Recall có chỗ lẫn; đối chiếu mẫu số trước áp dụng.
-- Exact Match, BLEU/ROUGE và trùng từ không tự đo tính đúng của briefing mở. LLM-as-a-judge không thay nguồn/đáp án độc lập và human review đã chốt.
-- Benchmark tổng quát và pass@k không thay sáu case nghiệp vụ hoặc tỷ lệ email xử lý đúng.
+- Hit@K measures whether at least one relevant result is retrieved. Recall@K measures the proportion of all relevant results retrieved. They coincide only when each query has one relevant result.
+- Evaluation slide S23 incorrectly states `4 / 6 = 0.5`; the result is approximately 0.667. Some Context Relevance/Recall and Precision/Recall labels are mixed; check the denominator before applying a formula.
+- Exact Match, BLEU/ROUGE, and word overlap do not establish factual correctness for an open-ended briefing. LLM-as-a-judge cannot replace independent evidence, answers, and confirmed human review.
+- General benchmarks and pass@k cannot replace the business cases or the proportion of correctly handled emails.
 
-Khi quyết định phụ thuộc thư viện/API, đọc tài liệu hiện hành và kiểm bằng source/test của dự án. Giáo trình chưa được thực thi đầy đủ và không chứng nhận dependency, auth hoặc chất lượng tích hợp. Quy trình chấm của dự án nằm tại [đánh giá](../05_evaluation-guide.md).
+For library/API decisions, consult current documentation and verify with project source/tests. The course material has not been fully executed and certifies neither dependencies, authentication, nor integration quality. The project's scoring policy belongs in the [evaluation guide](../05_evaluation-guide.md).

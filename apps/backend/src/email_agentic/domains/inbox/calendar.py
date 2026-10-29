@@ -7,7 +7,7 @@ from pydantic import ValidationError
 
 from email_agentic.agents.email_intake import EmailIntakeDecision
 from email_agentic.agents.meeting_intake import MeetingIntakeAgent
-from email_agentic.domains.research.service import ResearchRequest
+from email_agentic.models.research import ResearchRequest
 from email_agentic.integrations.calendar_event import eligible, revision
 from email_agentic.platform.errors import NotFound
 from email_agentic.runtime.jobs import enqueue

@@ -4,7 +4,7 @@ from psycopg.types.json import Jsonb
 from pydantic import ValidationError
 
 from email_agentic.agents.email_intake import EmailIntakeAgent, EmailIntakeDecision
-from email_agentic.domains.research.service import ResearchRequest
+from email_agentic.models.research import ResearchRequest
 from email_agentic.integrations.email_message import safe_addresses
 from email_agentic.platform.errors import Conflict, NotFound
 from email_agentic.runtime.jobs import enqueue
