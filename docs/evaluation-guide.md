@@ -85,3 +85,10 @@ Kết quả đã được owner duyệt có thể giữ làm mốc phát hiện 
 [CLI regression](../evals/regression.py) tạo reference có checksum, từ chối ghi đè và chỉ nhận report đã duyệt. Chạy `python -m evals.regression --help` từ môi trường backend để xem lệnh `capture` và `check`. Sau khi xuất snapshot riêng tư, `check` đối chiếu đầu vào, người nhận, lựa chọn gửi/lưu, URL và nội dung với reference. Nội dung thay đổi phải được review lại; không tự cập nhật reference để làm kiểm tra pass. Các tình huống sửa nội dung/nguồn/action và checksum thuộc [kiểm tra regression](../apps/backend/tests/test_accepted_regression.py).
 
 Reference không thay replay provider frozen: nó phát hiện thay đổi snapshot và bảo vệ nội dung đã duyệt, chưa chứng minh một lượt sinh mới có chất lượng tương đương. Kết quả luôn ghi `factual_accuracy` và `product_acceptance` là `not_evaluated`.
+
+
+### Bản đối chiếu dễ review
+
+[Review reader](../evals/review_bundle.py) tạo một file HTML riêng tư từ các golden nháp, kiểm checksum nguồn, hiển thị từng dữ kiện và mở nội dung nguồn tại chỗ. Chạy `python -m evals.review_bundle --help` trong môi trường backend; lặp `--golden` cho từng ca, `--output` phải là file mới. Reader không sửa golden, không gán reviewer và không khóa đáp án. Nguồn web cũ vẫn cần mở lại để xác nhận trước khi khóa.
+
+Bộ nháp v2 dùng câu email gốc từ dataset 2; bỏ giờ họp và số liệu PDF cũ không gắn với đầu vào hiện tại, thay bằng checklist yêu cầu nguồn thực hoặc ghi thiếu; các dữ kiện công khai chuyển từ nháp v1 vẫn chờ đối chiếu. Bản đọc riêng tư hiện ở `evals/results/golden-review-v2/review-current.html`, ngoài Git và Docker. Không dùng bản này để tuyên bố đạt accuracy trước review/lock và chấm output tương ứng.
