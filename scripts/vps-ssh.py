@@ -1,11 +1,24 @@
 """Run a command or a local shell script through the configured VPS SSH key."""
 import argparse
 import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+
+# Buffer the script before execution so commands reading stdin cannot consume it.
+SCRIPT_DRIVER = """import os, subprocess, sys, tempfile
+with tempfile.NamedTemporaryFile(prefix='email-agentic-ssh-', delete=False) as script:
+    path = script.name
+    script.write(sys.stdin.buffer.read())
+try:
+    result = subprocess.run(['bash', '-e', path], stdin=subprocess.DEVNULL)
+finally:
+    os.unlink(path)
+sys.exit(result.returncode)
+"""
 
 
 def main():
@@ -24,7 +37,7 @@ def main():
                '-o', f'UserKnownHostsFile={ROOT / ".runtime/ssh-known-hosts"} {Path.home() / ".ssh/known_hosts"}',
                '-p', port, '-i', str(key),
                (args.user or os.environ['VPS_SSH_USER']) + '@' + os.environ['VPS_HOST'],
-               'bash -se' if args.script else args.command]
+               'python3 -c ' + shlex.quote(SCRIPT_DRIVER) if args.script else args.command]
     result = subprocess.run(command, input=args.script.read_bytes() if args.script else None,
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=1500)
     sys.stdout.buffer.write(result.stdout)
