@@ -7,7 +7,10 @@ from evals.golden import canonical
 
 
 def normalize(value):
-    parts = urlsplit(value)
+    try:
+        parts = urlsplit(value)
+    except ValueError:
+        return value
     return urlunsplit(
         (
             parts.scheme.lower(),
@@ -17,6 +20,17 @@ def normalize(value):
             "",
         )
     )
+
+
+def source_links(text):
+    # Independent evaluator: inspect all written links, including plain URLs in email.
+    links = set()
+    for value in re.findall(r'https?://[^\s<>\]"\x27]+', text):
+        value = value.rstrip(".,;:!?。")
+        while value.endswith(")") and value.count(")") > value.count("("):
+            value = value[:-1]
+        links.add(normalize(value))
+    return links
 
 
 def score(output, golden, golden_sha, review=None):
@@ -41,10 +55,8 @@ def score(output, golden, golden_sha, review=None):
             "output_sha256": output_sha,
         }
     report = reports[0]
-    citations = {
-        normalize(url)
-        for url in re.findall(r"\]\((https?://[^)\s]+)\)", report["markdown"])
-    }
+    citations = source_links(report["markdown"])
+    all_links = citations | source_links(report.get("email_body", ""))
     evidence = {normalize(item["url"]): item for item in output.get("evidence", [])}
     supported = citations & evidence.keys()
     run = output["run"]
@@ -94,7 +106,7 @@ def score(output, golden, golden_sha, review=None):
         and critical_ok
         and readiness
         and len(supported) >= 12
-        and not citations - evidence.keys()
+        and not all_links - evidence.keys()
         and review.get("distinct_sources_verified") is True
         and review.get("news_freshness_passed") is True
         and measured is not None
@@ -110,7 +122,7 @@ def score(output, golden, golden_sha, review=None):
         "critical_facts_passed": critical_ok if eligible else None,
         "readiness": readiness if eligible else None,
         "cited_supported_urls": len(supported),
-        "unsupported_urls": sorted(citations - evidence.keys()),
+        "unsupported_urls": sorted(all_links - evidence.keys()),
         "source_target_met": len(supported) >= 12
         and bool(valid_review and review.get("distinct_sources_verified")),
         "recent_dated_sources": len(dated),

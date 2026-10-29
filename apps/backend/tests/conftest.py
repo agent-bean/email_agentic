@@ -6,6 +6,16 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from email_agentic.platform.database import Database
+from email_agentic.platform.config import Settings
+
+
+@pytest.fixture(autouse=True)
+def isolate_application_settings(monkeypatch):
+    # Tests opt into settings explicitly; ambient provider credentials must never reach them.
+    names = {(field.alias or name).casefold() for name, field in Settings.model_fields.items()}
+    for variable in tuple(os.environ):
+        if variable.casefold() in names:
+            monkeypatch.delenv(variable)
 
 
 @pytest.fixture

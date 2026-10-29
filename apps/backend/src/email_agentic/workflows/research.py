@@ -24,7 +24,10 @@ class ResearchState(TypedDict, total=False):
 
 
 def canonical_url(value):
-    parts = urlsplit(value)
+    try:
+        parts = urlsplit(value)
+    except (ValueError, TypeError):
+        return None
     if parts.scheme not in {"http", "https"} or not parts.hostname:
         return None
     return urlunsplit((parts.scheme, parts.netloc.lower(), parts.path.rstrip("/") or "/", parts.query, ""))
@@ -41,6 +44,17 @@ def publication_date(value):
         except (ValueError, TypeError, IndexError):
             return None
     return date if date.tzinfo else date.replace(tzinfo=UTC)
+
+
+def cited_urls(text):
+    urls = set()
+    for value in re.findall(r'https?://[^\s<>\]"\x27]+', text):
+        value = value.rstrip(".,;:!?。")
+        # Markdown's closing parenthesis is punctuation; balanced URL parentheses are data.
+        while value.endswith(")") and value.count(")") > value.count("("):
+            value = value[:-1]
+        urls.add(canonical_url(value))
+    return urls
 
 
 def make_graph(container, checkpointer):
@@ -67,7 +81,11 @@ def make_graph(container, checkpointer):
             ("company", CompanyInfoAgent(c.tools), "company:read"),
             ("memory", MemoryAgent(c.tools), "memory:read"),
             ("calendar", CalendarAgent(c.tools), "calendar:read"),
-            ("web", WebResearchAgent(c.tools), "web:read"),
+            ("web", WebResearchAgent(
+                c.tools,
+                run["config"].get("firecrawl_max_pages", 0)
+                if c.settings.firecrawl_api_key.get_secret_value() else 0,
+            ), "web:read"),
         ]
 
         async def branch(name, agent, scope):
@@ -125,15 +143,21 @@ def make_graph(container, checkpointer):
         if not evidence:
             raise Conflict("No evidence was retrieved; report generation stopped")
         branches = await c.db.all("SELECT branch,result FROM branch_results WHERE run_id=%s", (run["id"],))
-        draft = await ReportGenerationAgent(c.llm).run(run, evidence, branches)
+        agent = ReportGenerationAgent(c.llm)
+        draft = await agent.run(run, evidence, branches)
         known = {entry["url"] for entry in evidence}
-        cited = {canonical_url(url) for url in re.findall(r"\]\((https?://[^)\s]+)\)", draft.markdown)}
-        unknown = cited - known
+        correction_attempted = bool(cited_urls(draft.markdown + "\n" + draft.email_body) - known)
+        if correction_attempted:
+            # One bounded correction stays inside the run deadline; never publish unsupported links.
+            draft = await agent.run(run, evidence, branches, previous_draft=draft)
+        cited = cited_urls(draft.markdown)
+        unknown = (cited | cited_urls(draft.email_body)) - known
         if unknown:
             raise Conflict("Report contains an unsupported source URL")
         elapsed = (datetime.now(UTC) - run["created_at"]).total_seconds()
         quality = {
             "cited_sources": len(cited & known),
+            "citation_correction_attempted": correction_attempted,
             "source_target_met": len(cited & known) >= 12,
             "elapsed_seconds": elapsed,
             "target_seconds": run["config"]["target_seconds"],
@@ -149,6 +173,16 @@ def make_graph(container, checkpointer):
                 for response in (branch["result"].get("data") or [])
                 if response.get("status") == "failed"
             ],
+            "page_reads": {
+                status: len({
+                    canonical_url(item["url"])
+                    for branch in branches if branch["branch"] == "web"
+                    for response in (branch["result"].get("data") or [])
+                    for item in response.get("results", [])
+                    if item.get("page_read", {}).get("status") == status
+                })
+                for status in ("succeeded", "failed", "not_selected")
+            },
         }
         await c.reports.initial(run, draft, quality)
         await c.db.execute(

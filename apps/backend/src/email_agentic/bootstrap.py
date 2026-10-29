@@ -12,6 +12,7 @@ from email_agentic.domains.publication.service import Publication
 from email_agentic.domains.reports.service import Reports
 from email_agentic.domains.research.service import ResearchService
 from email_agentic.integrations.google import Google
+from email_agentic.integrations.firecrawl import Firecrawl
 from email_agentic.integrations.llm import LLM
 from email_agentic.integrations.tavily import Tavily
 from email_agentic.platform.database import Database
@@ -36,6 +37,11 @@ class Search(Empty):
 class CalendarWindow(Empty):
     start: str
     end: str
+
+
+class Scrape(Empty):
+    url: str = Field(min_length=8, max_length=4000)
+    timeout_seconds: float = Field(15, ge=1, le=15)
 
 
 class Action(Empty):
@@ -68,6 +74,7 @@ async def build_container(settings):
         knowledge = Knowledge(db)
         google = Google(client, settings)
         tavily = Tavily(client, settings.tavily_api_key.get_secret_value())
+        firecrawl = Firecrawl(client, settings.firecrawl_api_key.get_secret_value())
         publication = Publication(db, knowledge)
         tools = ToolExecutor(db, settings.tool_limit_per_minute)
 
@@ -82,6 +89,9 @@ async def build_container(settings):
 
         async def search(request, context):
             return await tavily.search(request.query, request.news)
+
+        async def scrape(request, context):
+            return await firecrawl.scrape(request.url, request.timeout_seconds)
 
         async def read_email(request, context):
             return await google.inbox()
@@ -110,6 +120,7 @@ async def build_container(settings):
             ("memory.retrieve", Domain, "memory:read", {"memory", "research"}, retrieve),
             ("calendar.list", CalendarWindow, "calendar:read", {"calendar", "scheduler"}, calendar),
             ("web.search", Search, "web:read", {"web"}, search),
+            ("web.scrape", Scrape, "web:read", {"web"}, scrape),
             ("email.read", Empty, "email:read", {"email", "scheduler"}, read_email),
             ("email.send", Action, "publication:execute", {"publication"}, publish),
             ("knowledge.publish", Action, "publication:execute", {"publication"}, publish),

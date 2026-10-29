@@ -127,3 +127,23 @@ def test_manual_review_is_bound_to_exact_output():
     assert result["passed"] is False  # No cited sources; a fact review alone is insufficient.
     output["reports"][0]["markdown"] = "Changed after review"
     assert score(output, golden, "locked-hash", review)["eligible"] is False
+
+
+@pytest.mark.parametrize("email", [
+    "See https://outside.invalid/source.",
+    "See [source](https://outside.invalid/source).",
+    "See <https://outside.invalid/source>.",
+])
+def test_scoring_checks_email_urls_and_counts_bare_report_links(email):
+    golden = Golden(case_id="TC-01", version="1", company_name="Example", domain="example.com",
+                    reference_time=datetime.now(UTC), source_mode="live", status="draft")
+    output = {
+        "run": {"company_name": "Example", "domain": "example.com",
+                "created_at": datetime.now(UTC).isoformat(), "config": {"target_seconds": 42}},
+        "reports": [{"markdown": "Source https://example.com/source_(one).", "email_body": email}],
+        "evidence": [{"url": "https://example.com/source_(one)"}],
+    }
+    result = score(output, golden, "checksum")
+    assert result["cited_supported_urls"] == 1
+    assert result["unsupported_urls"] == ["https://outside.invalid/source"]
+    assert result["eligible"] is False and result["completeness"] is None

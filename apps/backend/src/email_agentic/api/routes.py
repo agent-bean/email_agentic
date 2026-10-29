@@ -183,6 +183,7 @@ async def system(request: Request):
         "connections": {
             "llm": "configured" if c.settings.llm_api_key.get_secret_value() else "missing",
             "tavily": "configured" if c.settings.tavily_api_key.get_secret_value() else "missing",
+            "firecrawl": "configured" if c.settings.firecrawl_api_key.get_secret_value() else "missing",
             "google": "configured" if c.settings.google_token_path.exists() else "missing",
         },
         "jobs": await c.db.all("SELECT kind,status,count(*) AS total FROM jobs GROUP BY kind,status"),
