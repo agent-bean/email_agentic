@@ -1,48 +1,46 @@
-# Ứng dụng và phát triển local
+# Application and Local Development
 
-Đọc [yêu cầu sản phẩm](02_product-requirements.md) để hiểu mục tiêu; [kiến trúc và an toàn](04_architecture-and-safety.md) giải thích ranh giới khi thay đổi ứng dụng. Kết quả chạy thực tế thuộc `plans/reports/`, không phải cam kết mọi tiêu chí đã đạt.
+Start with the [product requirements](02_product-requirements.md) for the intended outcome and [architecture and safety](04_architecture-and-safety.md) for constraints on changes. Run evidence belongs in `plans/reports/`; it does not establish that every acceptance criterion has passed.
 
-## Bắt đầu local
+## Local setup
 
-Cần Python/uv, Node/npm và Docker Compose; phiên bản/dependencies thuộc [backend manifest](../apps/backend/pyproject.toml), [web manifest](../apps/web/package.json) và lockfiles tương ứng. Cấu hình theo [.env.example](../.env.example); không đưa credential vào Git hoặc in cấu hình đã resolve.
+Use Python/uv, Node/npm, and Docker Compose. Dependency requirements belong to the [backend manifest](../apps/backend/pyproject.toml), [web manifest](../apps/web/package.json), and their lockfiles. Configure from [.env.example](../.env.example); never commit credentials or print resolved configuration.
 
-[Makefile](../Makefile) là danh mục lệnh: chạy `make help` từ root. Lần đầu đi theo thứ tự `setup`, `check`, `db`, `build`, `migrate`, rồi `up`; backup phải thành công trước khi thay schema. [Local helper](../scripts/app-control.py) sở hữu thực thi, [local Compose](../infra/compose.local.yaml) sở hữu địa chỉ/port. Helper chỉ dành cho local; production theo [hướng dẫn release](06_release-and-operations.md).
+Run `make help` at the repository root for the command catalog in the [Makefile](../Makefile). For initial setup, follow `setup`, `check`, `db`, `build`, `migrate`, then `up`. A successful backup must precede schema changes. The [local helper](../scripts/app-control.py) owns execution and [local Compose](../infra/compose.local.yaml) owns addresses and ports. Production follows the [release guide](06_release-and-operations.md).
 
-Không khởi worker local với cùng hộp thư và bản sao DB production: hai DB độc lập không thể chống gửi trùng cho nhau. Không chạy lại seed trên bộ Google đã chuẩn bị. Token runtime mount read-only, chỉ cấp quyền đọc cho user container cần dùng; token seed không vào runtime. Không xóa volume để chữa lỗi khởi động thông thường.
+Do not run a local worker against the production mailbox and a copied production database: independent databases cannot prevent each other's duplicate sends. Do not repeat seeding against the prepared Google dataset. Mount runtime tokens read-only for the required container user; keep seed tokens out of runtime. Do not delete volumes to fix routine startup failures.
 
-Dùng `make test`, `make lint`, `make web-build` phù hợp thay đổi; test dùng DB riêng và cần image/PostgreSQL local. `make status` kiểm tiến trình, `make down` dừng stack và giữ volume. Chỉ dừng tiến trình mình đã khởi hoặc được giao quản lý.
+Use the [contribution guide](08_contributing-and-quality.md) to choose checks appropriate to the change. The database-backed test helper requires local PostgreSQL and the backend image; unit tests have a separate route. Stop only processes you started or are authorized to manage. The Makefile owns stack status and shutdown commands, including shutdown that preserves volumes.
 
-Các lệnh chọn unit/integration/E2E, module, browser test và quy trình PR nằm trong [quy ước đóng góp](08_contributing-and-quality.md). Trang tổng quan hỗ trợ tìm tên/domain và lọc trạng thái; bộ lọc được giữ trong URL. Mỗi nghiên cứu có tiến trình và hành động tiếp theo; báo cáo nội bộ, email khách hàng và gói duyệt là các phần riêng.
+## Review and publication decisions
 
-## Hành trình sử dụng
+- Preserve the customer's original email separately from research instructions. Do not reconstruct it from old context. Calendar and attachment inputs retain their own provenance.
+- Confirm the legal entity and domain before research. Identity confirmation does not authorize sending, report publication, or KB storage.
+- Review the internal report and customer email separately. Check sources, gaps, contradictions, and inferred needs; having a draft does not establish quality.
+- Review recipients, body, attachments, and publication choices as one version. Downloading a report does not select it for sending. An expired proposal requires a new edited version before another proposal.
+- Exporting to Gmail Drafts requires compose scope and grants no approval to send or write to the KB. Reconcile external draft edits, and avoid sending the same content through both Gmail and the application.
+- If delivery is uncertain, reconcile with Sent before deciding whether to send again. An immediate search miss does not prove that nothing was sent.
 
-1. Từ **Email & cuộc họp**, đồng bộ rồi chọn nguồn cần nghiên cứu. Với nhập tay, giữ nguyên email khách ở **Email gốc**, tách hướng dẫn vào **Yêu cầu nghiên cứu**. Khi nguồn không tải được, dùng **Tải lại nguồn**.
-2. Kiểm pháp nhân/domain trước **Xác nhận và nghiên cứu**. Đây là xác nhận danh tính, chưa cấp quyền gửi. Không dựng email nguồn từ context cũ.
-3. Review **Báo cáo** nội bộ và **Email nháp** cho khách riêng biệt. Kiểm nguồn, phần thiếu/mâu thuẫn và suy luận nhu cầu; có nháp chưa đồng nghĩa đủ chất lượng.
-4. Kiểm To/Cc/Bcc, nội dung và file trước khi lưu phiên bản/duyệt. Nhiều địa chỉ cách nhau bằng dấu phẩy được kiểm khi lưu. Tải báo cáo không tự chọn attachment gửi khách. Đề nghị hết hạn cần lưu phiên bản chỉnh sửa mới để đề nghị lại.
-5. **Lưu vào Gmail Drafts** cần scope compose; không duyệt, gửi hoặc ghi KB. Draft cũ và chỉnh sửa trực tiếp trong Gmail cần được đối chiếu; không gửi cùng nội dung ở cả Gmail và ứng dụng.
-6. Gửi/lưu KB chỉ theo gói đã duyệt. Khi gửi chưa rõ, dùng **Đối chiếu Sent** trước quyết định gửi lại. Không tìm thấy ngay không chứng minh chưa gửi.
+New automation needs a cutoff to avoid processing historical mail in bulk. [Settings](../apps/backend/src/email_agentic/platform/config.py) owns configuration and defaults; the private operations guide owns activation in the real environment.
 
-Automation mới cần cutoff để tránh xử lý hàng loạt thư cũ. Cấu hình/default thuộc [Settings](../apps/backend/src/email_agentic/platform/config.py); đường bật/tắt môi trường thật thuộc hướng dẫn riêng.
+## Find the implementation owner
 
-## Tìm source theo việc cần sửa
-
-| Công việc | Owner |
+| Change | Owner |
 | --- | --- |
-| Giao diện, điều hướng | [Web app](../apps/web/src/app/app.tsx), [features](../apps/web/src/features/) |
-| HTTP và quyền | [API](../apps/backend/src/email_agentic/api/routes.py), [auth](../apps/backend/src/email_agentic/platform/auth.py) |
-| Model và schema dùng chung | [Models](../apps/backend/src/email_agentic/models/): research, reports, API, agents và tools |
-| Khởi tạo, xử lý job | [Bootstrap](../apps/backend/src/email_agentic/bootstrap.py), [worker](../apps/backend/src/email_agentic/worker.py) |
-| Nghiên cứu, nội dung | [Workflow](../apps/backend/src/email_agentic/workflows/research.py), [agents](../apps/backend/src/email_agentic/agents/) |
-| Dữ liệu, quy tắc | [Domains](../apps/backend/src/email_agentic/domains/), [migrations](../apps/backend/migrations/) |
-| Provider, công cụ | [Integrations](../apps/backend/src/email_agentic/integrations/), [harness](../apps/backend/src/email_agentic/tools/harness.py) |
+| Interface and navigation | [Web app](../apps/web/src/app/app.tsx), [features](../apps/web/src/features/) |
+| HTTP and authorization | [API](../apps/backend/src/email_agentic/api/routes.py), [auth](../apps/backend/src/email_agentic/platform/auth.py) |
+| Shared contracts | [Models](../apps/backend/src/email_agentic/models/) |
+| Startup and background work | [Bootstrap](../apps/backend/src/email_agentic/bootstrap.py), [worker](../apps/backend/src/email_agentic/worker.py) |
+| Research and content | [Workflow](../apps/backend/src/email_agentic/workflows/research.py), [agents](../apps/backend/src/email_agentic/agents/) |
+| Business rules and persistence | [Domains](../apps/backend/src/email_agentic/domains/), [migrations](../apps/backend/migrations/) |
+| Providers and authorized tools | [Integrations](../apps/backend/src/email_agentic/integrations/), [harness](../apps/backend/src/email_agentic/tools/harness.py) |
 
-Khi thay HTTP contract, [web manifest](../apps/web/package.json) sở hữu lệnh `api:generate` từ OpenAPI sang [kiểu web](../apps/web/src/lib/api-schema.ts); không sửa kiểu sinh bằng tay. Web/backend có image riêng nên phải giữ tương thích API khi cập nhật độc lập.
+For HTTP contract changes, use `api:generate` in the web manifest to regenerate [web types](../apps/web/src/lib/api-schema.ts) from OpenAPI. Do not edit generated types by hand. Separate web and backend releases require compatible API contracts.
 
-## Giới hạn cần hiểu
+## Interpreting limitations
 
-Mục tiêu thời gian khác timeout xử lý. Tăng timeout không chứng minh đạt mốc PRD. [Đánh giá](05_evaluation-guide.md) sở hữu cách đọc số đo/nghiệm thu; không suy ra chất lượng từ một lượt thành công, số URL hay một gói được duyệt.
+A processing timeout is not a performance target; increasing it does not demonstrate PRD compliance. The [evaluation guide](05_evaluation-guide.md) owns acceptance interpretation. One successful run, an approved package, or a URL count does not establish overall quality.
 
-Nguồn có thể thiếu, cũ hoặc bị provider chặn. Citation thuộc evidence chỉ chứng minh URL đã thu, chưa chứng minh dữ kiện đúng. PDF/OCR có thể lỗi hoặc thiếu trang; cần review phần không đọc được. Giới hạn thực thi thuộc [web research](../apps/backend/src/email_agentic/agents/web_research.py), [integrations](../apps/backend/src/email_agentic/integrations/) và Settings.
+Sources may be missing, stale, or blocked. A collected citation does not prove a fact. PDF/OCR failures and unread pages require review. Execution limits belong to [web research](../apps/backend/src/email_agentic/agents/web_research.py), integrations, and Settings.
 
-[Retention](../apps/backend/src/email_agentic/platform/retention.py) sở hữu cleanup và điều kiện bảo vệ dữ liệu chờ xử lý. Nguồn hết hạn làm giảm khả năng kiểm tra lại; bản lưu cũ không tự thành bằng chứng hiện hành. Cleanup app không xóa email/lịch Google; backup có vòng đời riêng theo [vận hành](06_release-and-operations.md).
+[Retention](../apps/backend/src/email_agentic/platform/retention.py) owns cleanup and protection of pending work. Expired sources reduce reproducibility; an old snapshot is not automatically current evidence. Application cleanup does not delete Google mail or calendar events. Backups have a separate lifecycle in the [operations guide](06_release-and-operations.md).

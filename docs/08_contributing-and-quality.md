@@ -1,80 +1,53 @@
-# Đóng góp và kiểm chứng chất lượng
+# Contributing and quality verification
 
-Luồng chuẩn là nhánh công việc → pull request → CI đạt → squash merge → CI trên `main` → deploy đúng commit. Không push trực tiếp vào `main`. [Workflow](../.github/workflows/ci-cd.yml) sở hữu lệnh kiểm tra và điều kiện deploy; [vận hành](06_release-and-operations.md) sở hữu backup, rollback và quyền production.
+Use a work branch → pull request → successful CI → squash merge → CI on `main` → deployment of that exact commit. Do not push directly to `main`. The [workflow](../.github/workflows/ci-cd.yml) owns verification commands and deployment conditions; [operations](06_release-and-operations.md) owns backup, rollback, and production permissions.
 
-## Nhánh, commit và PR
+## Branches, commits, and pull requests
 
-Tạo nhánh từ `main` mới nhất, đặt tên `<type>/<mo-ta-ngan>` như `feat/review-workspace`, `fix/approval-expiry`, `test/publication`. Các type được kiểm tại [script convention](../scripts/check-pr-conventions.py). Commit và tiêu đề PR dùng Conventional Commits, ví dụ `feat(web): improve report review`. Scope không bắt buộc; breaking change phải nêu rõ contract và migration. Giữ commit tập trung, không ghi tham chiếu AI hoặc mã phase/audit vào code hay commit.
+Start from current `main` and name branches `<type>/<short-description>`, such as `feat/review-workspace` or `fix/approval-expiry`. The [convention checker](../scripts/check-pr-conventions.py) owns accepted types. Use Conventional Commits for commits and PR titles, for example `feat(web): improve report review`. Scope is optional; explain contract and migration effects for breaking changes. Keep commits focused, with no AI references or phase/audit labels in code or commit messages.
 
 ```bash
 git fetch origin
 git switch -c feat/review-workspace origin/main
 make hooks-install
-# Chỉnh sửa, kiểm thử, review diff rồi commit các file thuộc phạm vi.
+# Edit, test, review the diff, and commit only in-scope files.
 git push -u origin feat/review-workspace
 gh pr create --base main --title 'feat(web): improve report review' --body-file /path/to/pr-body.txt
 ```
 
-`make hooks-install` là lựa chọn local, chặn mọi ref push đến `main`, kể cả khi nhánh nguồn có tên khác. Installer từ chối thay thế hook/cấu hình hiện hữu; khi đó tích hợp guard thủ công. Hook không thay bảo vệ GitHub vì có thể bị bỏ qua bằng `--no-verify`.
+`make hooks-install` is an optional local guard against pushes targeting `main`, including pushes from differently named source branches. The [installer](../scripts/install-git-hooks.py) refuses to replace existing hooks/configuration; integrate the guard manually in that case. Hooks do not replace GitHub protection because `--no-verify` can bypass them.
 
-Nội dung PR nên theo mẫu sau, điền bằng kết quả thực:
+Describe the concrete problem and resulting behavior in the PR, then provide affected contracts/migrations, actual validation results and unrun checks with reasons, risks and rollback, and before/after images when the UI changes. Never include email, user data, tokens, dotenv files, private fixtures, production logs, or screenshots containing real data in PRs or artifacts. Inspect `git diff --cached` before committing.
 
-```text
-Vấn đề và hành vi sau thay đổi:
+Review correctness, ownership, approval, retries, and migration impact. Passing tests does not replace product acceptance. Squash merge only after `verify` passes and review conversations are resolved. A single-owner repository does not require an unavailable second reviewer.
 
-Phạm vi / contract / migration bị ảnh hưởng:
+## Test layers and module ownership
 
-Kiểm chứng (lệnh, kết quả, phần chưa chạy và lý do):
+For agent work, the controller delegates clearly bounded tasks with goals, readable/editable files, acceptance criteria, and the selected relevant skill. Parallel work requires disjoint ownership: agents must not edit the same file/configuration or control the same database/process. The controller owns integration decisions, diff review, cross-module verification, and final reporting. Delegates must not expand scope or revert another contributor's changes.
 
-Rủi ro và cách rollback:
+[EditorConfig](../.editorconfig) owns formatting conventions. [Backend configuration](../apps/backend/pyproject.toml), [web scripts](../apps/web/package.json), and the CI workflow own lint/type/build checks. Update lockfiles with dependency changes; CI uses frozen/clean installs.
 
-Ảnh trước/sau khi có thay đổi giao diện:
-```
+Use unit tests for isolated rules, integration tests for real database/renderer/process contracts, and E2E for public API and persistence journeys. Backend test layers live under `apps/backend/tests/{unit,integration,e2e}/<module>/`; web tests separate unit, component integration, and browser E2E with a real backend/database. Provider doubles belong at test boundaries, never in runtime implementation. CI must not call production providers.
 
-Không đưa email, dữ liệu người dùng, token, `.env`, private fixture, log production hoặc ảnh có dữ liệu thật vào PR/artifact. Kiểm `git diff --cached` trước commit. Review correctness, ownership, phê duyệt, retry và ảnh hưởng migration; pass tests không thay nghiệm thu sản phẩm. Chỉ squash merge khi check `verify` đạt và conversation đã xử lý. Repo một owner không yêu cầu một reviewer thứ hai không thể đáp ứng.
+Run the narrowest useful layer first. The [Makefile](../Makefile) owns root commands (`make help` lists them), including `test-unit`, `test-integration`, `test-e2e`, `test`, `test-scripts`, `web-test`, `lint`, and `web-build`. Filter backend tests with `PYTEST_ARGS`, for example `make test PYTEST_ARGS='-m integration -k publication'`. The web package owns direct npm test commands; the workflow is the authoritative full CI sequence.
 
-## Lớp kiểm thử và module
+Run `make setup` for dependencies. For local backend integration/E2E, prepare Docker and local configuration following the [application guide](03_application-guide.md), then run `make db build`. The [local helper](../scripts/app-control.py) owns backup/migration and creation of the separate `email_agentic_test` database. Never point tests at production. CI requires its isolated PostgreSQL service with `--require-database`, so missing databases fail instead of skipping required layers. Backend unit tests do not need PostgreSQL.
 
-Khi làm việc với agent, controller luôn giao các phần việc có ranh giới rõ cho subagent: nêu mục tiêu, file được đọc/sửa, tiêu chí đạt và skill phù hợp đã chọn. Chỉ chạy song song khi ownership không chồng nhau; không để nhiều agent sửa cùng file/config hoặc điều khiển cùng DB/process. Controller giữ quyết định tích hợp, review diff, kiểm chứng xuyên module và báo cáo cuối; delegate không tự mở rộng phạm vi hay hoàn tác thay đổi của người khác.
+After `make db build`, use `make web-test` for the web layers. It shares the helper's backup and isolated-database preparation and passes `TEST_DATABASE_URL` without printing credentials. Backup/migration failure must stop E2E. Direct npm E2E is for CI or an already prepared test database and requires an explicit `TEST_DATABASE_URL`.
 
-[EditorConfig](../.editorconfig) thống nhất UTF-8, LF, newline cuối file và indentation. Backend lint bằng Ruff, web kiểm TypeScript cho cả source, tests và config. Dependency thay đổi phải cập nhật lockfile; CI cài ở chế độ frozen/clean.
+Install Chromium once with `cd apps/web && npx --no-install playwright install --with-deps chromium`. The [browser runner](../apps/web/playwright.config.ts) manages its API/Vite test servers. Stop processes you start when work ends; do not create duplicates. CI installs the browser through the locked Playwright dependency rather than implicitly downloading a different package. Never upload traces or logs containing sensitive data.
 
-Backend tổ chức theo `apps/backend/tests/{unit,integration,e2e}/<module>/`; marker tự gán theo lớp. Unit kiểm quy tắc riêng; integration kiểm DB/renderer/process thật; E2E đi qua public API và persistence. Web có unit, integration component và E2E browser với backend/DB thật. Dùng doubles ở ranh giới provider trong test, không thay triển khai runtime bằng dữ liệu giả. Không gọi provider production trong CI.
+## GitHub main protection
 
-| Phạm vi | Lệnh từ root |
-| --- | --- |
-| Backend unit | `make test-unit` |
-| Backend integration | `make test-integration` |
-| Backend E2E | `make test-e2e` |
-| Toàn bộ backend | `make test` |
-| Chọn module/test | `make test PYTEST_ARGS='-m integration -k publication'` |
-| Script vận hành/Git | `make test-scripts` |
-| Web unit | `npm run test:unit --prefix apps/web` |
-| Web integration | `npm run test:integration --prefix apps/web` |
-| Toàn bộ web, tự chuẩn bị DB test | `make web-test` |
-| Web E2E | `npm run test:e2e --prefix apps/web` |
-| Lint / build | `make lint web-build` |
+The [branch-protection declaration](../.github/main-protection.json) owns required checks, review/conversation requirements, history constraints, and administrator enforcement. The [repository settings](../.github/repository-settings.json) own squash-only merging, PR-title commit naming, and branch deletion after merge. These files express desired configuration; their existence does not prove remote enforcement. Audit by reading current GitHub settings. Each clone needs its own optional hook installation.
 
-`make setup` cài dependency. Trước backend integration/E2E local, chuẩn bị Docker, `.env` theo hướng dẫn ứng dụng rồi `make db build`; helper test backup/migrate DB local trước khi tạo/migrate DB riêng `email_agentic_test`. Không trỏ test vào DB production. CI dùng PostgreSQL service riêng và `--require-database` để thiếu DB trở thành lỗi thay vì skip. Backend unit không cần DB.
-
-Sau `make db build`, dùng `make web-test` để chạy web unit/integration rồi E2E. Helper dùng chung bước backup/migrate DB local và tạo/migrate `email_agentic_test` với backend test, tự cấp `TEST_DATABASE_URL` cho browser runner mà không in credential; không cần tự export DSN. Backup hoặc migration lỗi thì không chạy E2E. Lệnh npm E2E trực tiếp dành cho CI/DB test đã chuẩn bị và cần `TEST_DATABASE_URL` tường minh.
-
-Web E2E cần Chromium: chạy `cd apps/web && npx --no-install playwright install --with-deps chromium` một lần. Runner quản lý API/Vite test; đóng các process mình khởi tạo khi kết thúc. CI cài browser từ dependency đã lock, không tải một bản Playwright khác qua `npx` tự động. Không upload browser trace/log chứa dữ liệu nhạy cảm.
-
-## Bảo vệ main trên GitHub
-
-[Cấu hình khai báo](../.github/main-protection.json) yêu cầu PR, check `verify` cập nhật với base, giải quyết conversation, linear history; cấm force push/xóa và áp dụng cả admin. Không yêu cầu approval thứ hai. Đây là cấu hình mong muốn, file tồn tại không chứng minh đã áp dụng trên remote.
-
-Ngày 30/10/2026 đã áp dụng cấu hình này và đọc lại thành công từ GitHub. Checkout triển khai cũng đã bật pre-push guard. Máy clone khác vẫn cần chạy `make hooks-install`; trạng thái remote có thể thay đổi nên cần đọc lại bằng lệnh kiểm bên dưới khi audit.
-
-[Cấu hình merge](../.github/repository-settings.json) chỉ cho squash merge, dùng tiêu đề PR làm commit title và tự xóa nhánh sau merge. Các thiết lập này cũng đã áp dụng ngày 30/10/2026, để convention tiêu đề PR được giữ khi vào `main`. Bản cấu hình trước thay đổi được lưu ở `.runtime/merge-settings-before-quality.json` trên máy thực hiện.
-
-Quản trị viên review cấu hình rồi áp dụng bằng `gh` khi được phép:
+An administrator reviews these declarations and applies them only with authorization:
 
 ```bash
 gh api --method PUT repos/agent-bean/email_agentic/branches/main/protection --input .github/main-protection.json
 gh api repos/agent-bean/email_agentic/branches/main/protection
 gh api --method PATCH repos/agent-bean/email_agentic --input .github/repository-settings.json
+gh api repos/agent-bean/email_agentic
 ```
 
-Tên check `verify` là contract với bảo vệ nhánh; khi đổi job phải cập nhật cấu hình cùng lúc. Dùng squash merge để tiêu đề PR thành commit chính; không merge commit khi yêu cầu linear history. Bảo vệ nhánh không thay quản lý environment `vps` và secret. Thay workflow hoặc production entry point phải được review theo ranh giới quyền trong hướng dẫn vận hành.
+The `verify` check name is a branch-protection contract; update the declaration when renaming the job. Squash merging preserves the PR title as the main commit title and satisfies linear history. Branch protection does not replace environment `vps` permissions or secret management. Workflow and production entry-point changes require review against the operations guide's permission boundaries. Store application receipts and protected pre-change configuration in operational evidence, not this evergreen guide.

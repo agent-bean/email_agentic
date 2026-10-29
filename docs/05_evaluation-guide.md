@@ -1,47 +1,47 @@
-# Đánh giá chất lượng
+# Quality Evaluation
 
-[PRD](02_product-requirements.md) sở hữu sáu case, ngưỡng và quyết định nghiệm thu. Golden là đáp án có bằng chứng được người review xác nhận; email mẫu hoặc báo cáo vừa sinh không phải golden. Đáp án nằm ngoài runtime/image, không được đưa vào prompt, tool hoặc API để làm bài đạt.
+The [PRD](02_product-requirements.md) owns cases, thresholds, and acceptance decisions. A golden is an evidence-backed answer reviewed by a person; a sample email or newly generated report is not a golden. Keep answers outside runtime and application images. Never expose them through prompts, tools, or APIs to improve a score.
 
-## Chọn đúng nguồn và phép kiểm
+## Find the evaluation owner
 
-| Việc cần làm | Owner thực thi |
+| Task | Executable owner |
 | --- | --- |
-| Chọn case và dữ liệu đầu vào | [Cases](../evals/cases/), [fixtures](../evals/fixtures/) |
-| Tạo, review, khóa/verify golden | [Golden CLI](../evals/golden.py) |
-| Thu lượt live chưa duyệt | [Collector](../evals/runner/collect.py) |
-| Xuất/chấm output gắn với review | [Runner](../evals/runner/run.py), [scoring](../evals/scoring/) |
-| Đọc nguồn và dữ kiện để review | [Review reader](../evals/review_bundle.py) |
-| Bảo vệ snapshot đã được duyệt | [Regression CLI](../evals/regression.py) |
-| Record/replay sinh báo cáo | [Generation replay](../evals/runner/replay.py) |
-| Record/replay thu thập web | [Web replay](../evals/runner/web_replay.py) |
+| Select cases and inputs | [Cases](../evals/cases/), [fixtures](../evals/fixtures/) |
+| Prepare, review, lock, and verify goldens | [Golden CLI](../evals/golden.py) |
+| Collect an unapproved live run | [Collector](../evals/runner/collect.py) |
+| Export and score reviewed outputs | [Runner](../evals/runner/run.py), [scoring](../evals/scoring/) |
+| Inspect evidence for review | [Review reader](../evals/review_bundle.py) |
+| Protect an approved snapshot | [Regression CLI](../evals/regression.py) |
+| Record/replay report generation | [Generation replay](../evals/runner/replay.py) |
+| Record/replay web collection | [Web replay](../evals/runner/web_replay.py) |
 
-Xem `--help` của module tương ứng trong môi trường backend để lấy tham số hiện hành. Golden nằm trong `evals/golden/`, output/cassette/review trong `evals/results/`, đầu vào riêng tại `evals/fixtures/private/`; đều ngoài Git. Không ghi đè artifact để làm kiểm tra pass. Không chạy lại Google seed đã chuẩn bị.
+Use each module's `--help` in the backend environment for current arguments. Goldens belong in `evals/golden/`, outputs/cassettes/reviews in `evals/results/`, and private inputs in `evals/fixtures/private/`, all excluded from Git. Do not overwrite artifacts to make checks pass or repeat the prepared Google seed.
 
-## Quy trình review và nghiệm thu
+## Review and acceptance
 
-1. Chốt input đúng case/phiên bản và danh tính doanh nghiệp. Nguồn chuẩn là slide đề gốc; email đã seed trong Gmail không quyết định câu chữ của case. URL đã hiệu chỉnh vẫn được giữ. Không thêm subject, ngày họp hay hướng dẫn setup vào email nguồn.
-2. Tách lịch/PDF bổ sung khỏi email nguồn và ghi provenance. Đề không cung cấp bytes hồ sơ PDF; tài liệu tự chuẩn bị không được gọi là hồ sơ chính thức của doanh nghiệp. Ca thiếu attachment thực phải ghi thiếu, không bù bằng golden trong context.
-3. Chuẩn bị facts/checklist từ nguồn độc lập, lưu vị trí/checksum và review trước khi khóa. Dữ kiện chưa có nguồn phải bổ sung bằng chứng hoặc yêu cầu xử lý thiếu dữ liệu; không bịa đáp án. Đổi nguồn/đáp án cần phiên bản mới và review lại.
-4. Thu output live theo input đã chốt. Xác nhận danh tính khi chạy collector không phải duyệt báo cáo/gửi mail/KB. Collector không đọc golden; dùng effective input đã xuất khi chấm, không tự thay bằng email mới nhận.
-5. Review đúng output cố định và đúng golden, gắn checksum cả hai. Người review kiểm từng dữ kiện, mức quan trọng, checklist sẵn sàng, nguồn độc lập và ngày tin tức; review sai phiên bản không chuyển sang lượt mới.
-6. Chấm bằng scorer. Khi thiếu human review hợp lệ, chỉ báo kiểm tra cấu trúc, không tự báo accuracy/completeness hoặc nghiệm thu. Review độc lập của agent hỗ trợ đối chiếu nhưng không thay xác nhận của người dùng.
+1. Fix the case version, input, and company identity. The original assignment slides are the case authority; a seeded Gmail email does not determine case wording. Preserve corrected URLs. Do not add a subject, meeting date, or setup instructions to source email text.
+2. Keep supplemental calendar/PDF inputs separate from source email and record provenance. The assignment supplies no company-profile PDF bytes; a prepared document is not an official company profile. Record missing attachments instead of filling the context with golden answers.
+3. Prepare facts and checklists from independent sources, retaining locations and checksums. Review before locking. Unsupported facts need evidence or an explicit missing-data expectation, never an invented answer. Source or answer changes require a new version and review.
+4. Collect live output against the fixed input. Identity confirmation in the collector does not approve reports, email sending, or KB storage. Keep goldens out of collection. Score against the exported effective input, without silently substituting a newer email.
+5. Review the exact frozen output against the exact golden, binding both checksums. Review facts, significance, readiness criteria, independent sources, and news dates. A review of another version does not transfer to this run.
+6. Use the scorer. Without valid human review, report structural checks only, not factual accuracy, completeness, or acceptance. An independent agent review can assist comparison but cannot replace the user's confirmation.
 
-Checksum phát hiện sửa ngoài ý muốn, không là chữ ký chống người sửa cả nội dung/hash. Reviewer/khóa không được tự gán chỉ vì batch cũ từng được chấp thuận. Dataset/output cũ không tự trở thành phiên bản mới; lịch sử batch ở `plans/reports/` và artifact riêng.
+Checksums detect accidental changes; they are not signatures against someone who can edit both content and hashes. Do not assign a reviewer or lock merely because an earlier batch was approved. Old datasets and outputs do not automatically become new versions. Batch history belongs in `plans/reports/` and private artifacts.
 
-## Phán đoán chất lượng
+## Quality judgments
 
-Đếm URL không chứng minh nguồn độc lập hoặc đúng dữ kiện. Citation thuộc evidence chưa đủ: nguồn phải hỗ trợ đúng pháp nhân, thời điểm và nội dung. Ngày header/cập nhật/truy xuất không tự chứng minh ngày xuất bản. Tin ngoài cửa sổ giữ ở bối cảnh, không tính đạt độ mới. Dữ kiện ngoài golden bị sai vẫn phải ghi vào review, không chỉ chấm phần hệ thống nhớ được.
+URL counts establish neither source independence nor factual correctness. Evidence must support the correct entity, time, and claim. Header, update, and retrieval dates do not automatically establish publication dates. Out-of-window news belongs in historical context rather than freshness credit. Record incorrect claims outside the golden too; do not score only what the system remembered.
 
-Review độ sâu qua sản phẩm có tên/công dụng, triển khai/đối tác có bằng chứng, số liệu đúng phạm vi, tin mới liên quan cuộc trao đổi và câu hỏi cụ thể để xác nhận phần chưa biết. Thiếu nguồn thì đánh giá cách nêu khoảng trống, không yêu cầu model điền cho đủ số. Nhận định nhu cầu phải dẫn căn cứ và giữ nhãn phân tích.
+Assess depth through named products and their purpose, evidenced deployments/partners, correctly scoped figures, relevant recent news, and specific questions for unresolved points. When sources are missing, judge how the report expresses gaps rather than demanding invented facts to fill a quota. Needs analysis must retain its evidence and inference label.
 
-Review email riêng: nội dung viết cho khách/đối tác, reply khi có email khách hoặc mở đầu khi chưa có; không lộ nghiên cứu nội bộ/thông tin riêng hay bịa năng lực/cam kết. Nội dung được duyệt để gửi không tự chứng minh đáp ứng toàn bộ PRD.
+Review customer email separately: a reply when customer email exists, or an opening message when appropriate. Exclude internal research and private information, and reject invented capabilities or commitments. Approval to send is not proof of full PRD compliance.
 
-Mục tiêu thời gian và timeout có ý nghĩa khác nhau. Phép đo PRD gồm queue/retry đến khi Markdown lưu xong; thời gian chờ xác nhận danh tính chỉ được tách khi có đủ mốc hợp lệ. Thời gian xử lý chủ động không thay số đo đầu-cuối. Output cũ thiếu mốc không được hồi tố hoặc tuyên bố đạt. Công thức/field thuộc [scoring](../evals/scoring/); không đổi ngưỡng sau chạy để làm đạt.
+Performance targets differ from processing timeouts. PRD timing includes queueing and retries until Markdown persistence; exclude identity-confirmation waiting only with valid timestamps. Active processing time cannot replace the end-to-end measure. Do not backfill missing timestamps or claim old outputs passed. [Scoring](../evals/scoring/) owns formulas and fields; never change thresholds after a run to obtain a pass.
 
-## Giới hạn từng loại hồi quy
+## Regression boundaries
 
-Reference báo cáo đã duyệt bảo vệ snapshot input/người nhận/lựa chọn/nội dung. Nó không chứng minh lượt sinh mới có cùng chất lượng; thay nội dung cần review lại, không tự cập nhật reference.
+An approved report reference protects its input, recipients, choices, and content snapshot. It does not prove the quality of fresh generation. Content changes require review, not automatic reference updates.
 
-Generation replay kiểm đường dựng prompt/schema/sửa citation với response provider đã ghi và input đóng băng. Web replay kiểm logic thu thập với response search/scrape đã ghi. Không lấy report cũ giả làm response provider, không fallback mạng khi replay sai input/cassette. Record gọi provider thật, có chi phí và cần phạm vi dữ liệu được phép.
+Generation replay exercises prompt/schema construction and citation repair against recorded provider responses and frozen inputs. Web replay exercises collection logic against recorded search/scrape responses. Do not substitute an old report for a provider response or fall back to the network on a cassette/input mismatch. Recording calls real providers, incurs costs, and requires authorized data scope.
 
-Hai phạm vi replay không tự chứng minh toàn workflow: SQL, auth/audit DB, Google, checkpoint/approval và transport/retry provider cần kiểm riêng. Cassette chứa dữ liệu riêng tư; không chứa credential. Replay không đo stochastic stability, nguồn live, latency production hoặc factual accuracy. Bằng chứng thực thi thuộc `plans/reports/`, không phải tài liệu evergreen.
+Neither replay scope proves the full workflow. SQL, database authentication/auditing, Google, checkpoints/approvals, and provider transport/retry need separate checks. Cassettes may contain private data but must never contain credentials. Replay does not measure stochastic stability, live sources, production latency, or factual accuracy. Execution evidence belongs in `plans/reports/`, outside evergreen guidance.
