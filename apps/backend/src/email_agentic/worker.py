@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import signal
-from contextlib import suppress
+from contextlib import nullcontext, suppress
 from datetime import datetime, UTC, timedelta
 from zoneinfo import ZoneInfo
 
@@ -14,7 +14,10 @@ from email_agentic.bootstrap import build_container
 from email_agentic.platform.config import get_settings
 from email_agentic.platform.database import active_claim
 from prometheus_client import start_http_server
-from email_agentic.platform.errors import ProviderFailure
+from email_agentic.platform.errors import JobLeaseLost, ProviderFailure
+from email_agentic.domains.research.execution import begin_processing, reserve_provider_attempt
+from email_agentic.runtime.budget import processing_budget
+from email_agentic.runtime.execution import INTAKE_JOBS, begin_intake, reserve_intake_attempt
 from email_agentic.platform.telemetry import DURATION, JOBS, configure, job_trace_context, tracer
 from email_agentic.runtime.jobs import enqueue
 from email_agentic.tools.harness import ToolContext
@@ -30,12 +33,15 @@ class Worker:
         self.research_slot = asyncio.Semaphore(1)
         self.thread_locks = {}
 
-    async def heartbeat(self, job, task):
+    async def heartbeat(self, job):
         while True:
             await asyncio.sleep(15)
-            if not await self.c.jobs.heartbeat(job):
-                task.cancel()
-                return
+            try:
+                current = await self.c.jobs.heartbeat(job)
+            except Exception as exc:
+                raise JobLeaseLost("Job heartbeat unavailable") from exc
+            if not current:
+                raise JobLeaseLost("Job lease lost")
 
     async def handle(self, job):
         c = self.c
@@ -50,8 +56,16 @@ class Worker:
                 payload = (
                     Command(resume={"decision_available": True}) if state.next else {"run_id": str(run["id"])}
                 )
-                async with asyncio.timeout(run["config"]["timeout_seconds"]):
-                    await self.graph.ainvoke(payload, config)
+                async with c.db.transaction() as connection:
+                    remaining = await begin_processing(connection, job)
+
+                async def reserve(key):
+                    async with c.db.transaction() as connection:
+                        return await reserve_provider_attempt(connection, job, key)
+
+                with processing_budget(remaining, reserve):
+                    async with asyncio.timeout(remaining):
+                        await self.graph.ainvoke(payload, config)
         elif job["kind"] == "publish":
             action = await c.db.one("SELECT * FROM publication_actions WHERE id=%s", (job["entity_id"],))
             context = ToolContext(job["owner"], "publication", frozenset({"publication:execute"}))
@@ -79,27 +93,30 @@ class Worker:
         else:
             raise ValueError("Unknown job type")
 
-    async def process(self, job):
-        context, links = job_trace_context(job)
-        with DURATION.labels(job["kind"]).time(), tracer().start_as_current_span(
-            "job." + job["kind"], context=context, links=links,
-            attributes={"job.id": str(job["id"]), "job.kind": job["kind"], "job.attempt": job["attempt"]},
-        ):
-            token = active_claim.set(job)
+    async def execute_claim(self, job):
+        lock = self.c.db.run_lock(job["entity_id"]) if job["kind"] in {"research", "resume", "approval_resume"} else nullcontext()
+        async with lock:
             try:
-                # Create inside the span: asyncio tasks copy their creation context.
-                task = asyncio.create_task(self.handle(job))
-            finally:
-                active_claim.reset(token)
-            heartbeat = asyncio.create_task(self.heartbeat(job, task))
-            try:
-                await task
-                await self.c.jobs.finish(job)
-                JOBS.labels(job["kind"], "succeeded").inc()
-            except asyncio.CancelledError:
-                task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await task
+                token = active_claim.set(job)
+                try:
+                    if job["kind"] in INTAKE_JOBS:
+                        async with self.c.db.transaction() as connection:
+                            remaining = await begin_intake(connection, job, self.c.settings.research_timeout_seconds)
+
+                        async def reserve(key):
+                            async with self.c.db.transaction() as connection:
+                                return await reserve_intake_attempt(connection, job, key)
+
+                        with processing_budget(remaining, reserve):
+                            async with asyncio.timeout(remaining):
+                                await self.handle(job)
+                    else:
+                        await self.handle(job)
+                finally:
+                    active_claim.reset(token)
+                if await self.c.jobs.finish(job):
+                    JOBS.labels(job["kind"], "succeeded").inc()
+            except JobLeaseLost:
                 raise
             except Exception as exc:
                 retry = (
@@ -108,28 +125,34 @@ class Worker:
                     and not exc.ambiguous
                     and job["attempt"] < 3
                 )
-                error = (
-                    f"{exc.provider}:{exc.category}"
-                    if isinstance(exc, ProviderFailure)
-                    else type(exc).__name__
-                )
-                await self.c.jobs.finish(job, "failed", error, retry)
-                if job["kind"] == "email_intake":
-                    await self.c.db.execute(
-                        "UPDATE email_triage SET status=%s,error_code=%s,updated_at=now() WHERE input_id=%s AND owner=%s",
-                        ("queued" if retry else "failed", error, job["entity_id"], job["owner"]),
-                    )
-                if job["kind"] == "calendar_intake":
-                    await self.c.db.execute("UPDATE calendar_triage SET status=%s,error_code=%s,updated_at=now() WHERE id=%s AND owner=%s",
-                                       ("queued" if retry else "failed", error, job["entity_id"], job["owner"]))
-                if job["kind"] in {"research", "resume"} and not retry:
-                    await self.c.research.status(job["entity_id"], "failed", error)
-                JOBS.labels(job["kind"], "failed").inc()
+                error = f"{exc.provider}:{exc.category}" if isinstance(exc, ProviderFailure) else type(exc).__name__
+                if await self.c.jobs.finish(job, "failed", error, retry):
+                    JOBS.labels(job["kind"], "failed").inc()
                 logger.warning("Job failed: kind=%s category=%s", job["kind"], type(exc).__name__)
-            finally:
-                heartbeat.cancel()
-                with suppress(asyncio.CancelledError):
+
+    async def process(self, job):
+        context, links = job_trace_context(job)
+        with DURATION.labels(job["kind"]).time(), tracer().start_as_current_span(
+            "job." + job["kind"], context=context, links=links,
+            attributes={"job.id": str(job["id"]), "job.kind": job["kind"], "job.attempt": job["attempt"]},
+        ):
+            # Keep run exclusion through the atomic outcome, not only graph invocation.
+            task = asyncio.create_task(self.execute_claim(job))
+            heartbeat = asyncio.create_task(self.heartbeat(job))
+            try:
+                completed, _ = await asyncio.wait({task, heartbeat}, return_when=asyncio.FIRST_COMPLETED)
+                if heartbeat in completed:
                     await heartbeat
+                await task
+            except JobLeaseLost:
+                # Recovery owns the outcome once the lease cannot be established.
+                JOBS.labels(job["kind"], "lease_lost").inc()
+            except asyncio.CancelledError:
+                raise
+            finally:
+                task.cancel()
+                heartbeat.cancel()
+                await asyncio.gather(task, heartbeat, return_exceptions=True)
 
     async def schedule(self):
         c = self.c

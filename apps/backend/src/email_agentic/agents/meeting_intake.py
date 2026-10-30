@@ -1,9 +1,10 @@
 import json
 from email_agentic.agents.email_intake import EmailIntakeDecision
+from email_agentic.ports.research import StructuredGenerator
 
 
 class MeetingIntakeAgent:
-    def __init__(self, llm):
+    def __init__(self, llm: StructuredGenerator):
         self.llm = llm
 
     async def run(self, input_id, source):

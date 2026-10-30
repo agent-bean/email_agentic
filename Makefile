@@ -43,6 +43,14 @@ lint: ## Lint the application backend and local stack helper
 typecheck: ## Typecheck the web application
 	npm run typecheck --prefix apps/web
 
+.PHONY: api-generate api-check
+
+api-generate: ## Generate web API types without starting a server or loading credentials
+	uv run --project apps/backend python scripts/check-api-contract.py
+
+api-check: ## Verify generated web types match the backend OpenAPI contract
+	uv run --project apps/backend python scripts/check-api-contract.py --check
+
 release: ## Package committed deployment source without credentials or runtime data
 	python3 scripts/prepare-release.py
 

@@ -3,12 +3,16 @@ from contextvars import ContextVar
 
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
+from psycopg import AsyncConnection
+
+from email_agentic.platform.errors import JobLeaseLost
 
 active_claim = ContextVar("active_claim", default=None)
 
 
 class Database:
     def __init__(self, dsn: str):
+        self.dsn = dsn
         self.pool = AsyncConnectionPool(
             dsn, min_size=1, max_size=6, open=False, kwargs={"row_factory": dict_row}
         )
@@ -33,8 +37,18 @@ class Database:
                         )
                     ).fetchone()
                     if current is None:
-                        raise RuntimeError("Job lease lost")
+                        raise JobLeaseLost("Job lease lost")
                 yield connection
+
+    @asynccontextmanager
+    async def run_lock(self, run_id):
+        # A dedicated autocommit session holds no transaction or pooled connection
+        # across provider calls. Closing it also releases the lock after cancellation.
+        async with await AsyncConnection.connect(self.dsn, autocommit=True) as connection:
+            await connection.execute(
+                "SELECT pg_advisory_lock(hashtextextended(%s,0))", (f"research:{run_id}",)
+            )
+            yield
 
     async def one(self, sql, params=()):
         async with self.transaction() as connection:

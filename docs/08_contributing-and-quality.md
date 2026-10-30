@@ -27,6 +27,8 @@ For agent work, the controller delegates clearly bounded tasks with goals, reada
 
 [EditorConfig](../.editorconfig) owns formatting conventions. [Backend configuration](../apps/backend/pyproject.toml), [web scripts](../apps/web/package.json), and the CI workflow own lint/type/build checks. Update lockfiles with dependency changes; CI uses frozen/clean installs.
 
+Declare response models for JSON endpoints and consume generated operation types in the web client. After a contract change, run `make api-generate` and include the generated diff; `make api-check` fails CI when source and generated types differ. Keep explicit tests for version conflicts, unsaved navigation, stale lease outcomes, recovery, and rendering/retention races when changing those boundaries.
+
 Use unit tests for isolated rules, integration tests for real database/renderer/process contracts, and E2E for public API and persistence journeys. Backend test layers live under `apps/backend/tests/{unit,integration,e2e}/<module>/`; web tests separate unit, component integration, and browser E2E with a real backend/database. Provider doubles belong at test boundaries, never in runtime implementation. CI must not call production providers.
 
 Run the narrowest useful layer first. The [Makefile](../Makefile) owns root commands (`make help` lists them), including `test-unit`, `test-integration`, `test-e2e`, `test`, `test-scripts`, `web-test`, `lint`, and `web-build`. Filter backend tests with `PYTEST_ARGS`, for example `make test PYTEST_ARGS='-m integration -k publication'`. The web package owns direct npm test commands; the workflow is the authoritative full CI sequence.

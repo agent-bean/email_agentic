@@ -1,3 +1,4 @@
+import asyncio
 import io
 import uuid
 
@@ -128,3 +129,71 @@ async def test_unchanged_attachment_is_reused_when_enabling_send_and_consumes_ma
         assert package["attachments"] == draft_package["attachments"]
         await c.publication.complete(action["id"], "succeeded", "sent-1")
         assert (await db.one("SELECT status FROM gmail_drafts WHERE id=%s", (draft_id,)))["status"] == "sent"
+
+
+@pytest.mark.parametrize("change", ["edit", "raw_expiry", "history_expiry"])
+async def test_edit_renders_without_run_lock_and_revalidates_before_saving(db, monkeypatch, change):
+    import email_agentic.domains.reports.files as files
+
+    started, release = asyncio.Event(), asyncio.Event()
+
+    async def controlled_render(markdown, format, title):
+        started.set()
+        await release.wait()
+        return markdown.encode()
+
+    monkeypatch.setattr(files, "render_export", controlled_render)
+    async with build_container(Settings(APP_ENV="test", DATABASE_URL=db.pool.conninfo, _env_file=None)) as c:
+        owner = f"{uuid.uuid4()}@example.invalid"
+        rid, report = await make_report(c, owner)
+        edit = ReportEdit(version=1, markdown="New report", email_subject=report["email_subject"],
+                          email_body=report["email_body"], attachment_formats=["md"])
+        task = asyncio.create_task(c.reports.edit(owner, rid, edit))
+        try:
+            await asyncio.wait_for(started.wait(), 5)
+            async with db.transaction() as connection:
+                await connection.execute("SELECT id FROM research_runs WHERE id=%s FOR UPDATE NOWAIT", (rid,))
+            if change == "edit":
+                await c.reports.edit(owner, rid, edit.model_copy(update={"attachment_formats": []}))
+            else:
+                column = "raw_purged_at" if change == "raw_expiry" else "history_purged_at"
+                await db.execute(f"UPDATE research_runs SET {column}=now() WHERE id=%s", (rid,))
+            release.set()
+            with pytest.raises(NotFound if change == "history_expiry" else Conflict):
+                await asyncio.wait_for(task, 5)
+            assert not await db.all("SELECT f.id FROM report_files f JOIN reports r ON r.id=f.report_id WHERE r.run_id=%s", (rid,))
+            assert (await c.reports.latest(owner, rid))["version"] == (2 if change == "edit" else 1)
+        finally:
+            if not task.done():
+                task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+
+async def test_export_does_not_recreate_content_purged_during_render(db, monkeypatch):
+    import email_agentic.domains.reports.files as files
+
+    started, release = asyncio.Event(), asyncio.Event()
+
+    async def controlled_render(markdown, format, title):
+        started.set()
+        await release.wait()
+        return markdown.encode()
+
+    monkeypatch.setattr(files, "render_export", controlled_render)
+    async with build_container(Settings(APP_ENV="test", DATABASE_URL=db.pool.conninfo, _env_file=None)) as c:
+        owner = f"{uuid.uuid4()}@example.invalid"
+        rid, report = await make_report(c, owner)
+        task = asyncio.create_task(c.reports.files.export(owner, rid, report["id"], "md"))
+        try:
+            await asyncio.wait_for(started.wait(), 5)
+            async with db.transaction() as connection:
+                await connection.execute("SELECT id FROM research_runs WHERE id=%s FOR UPDATE NOWAIT", (rid,))
+                await connection.execute("UPDATE research_runs SET history_purged_at=now() WHERE id=%s", (rid,))
+            release.set()
+            with pytest.raises(NotFound):
+                await asyncio.wait_for(task, 5)
+            assert not await db.all("SELECT id FROM report_files WHERE report_id=%s", (report["id"],))
+        finally:
+            if not task.done():
+                task.cancel()
+            await asyncio.gather(task, return_exceptions=True)

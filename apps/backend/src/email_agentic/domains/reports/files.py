@@ -2,26 +2,40 @@
 
 import hashlib
 import uuid
+from dataclasses import dataclass
 
 from email_agentic.integrations.report_export import MIME, render_export
+from email_agentic.models.reports import AttachmentDescriptor
 from email_agentic.platform.errors import NotFound, Conflict
 
 
 def descriptor(row):
-    return {
-        "id": str(row["id"]),
-        "filename": row["filename"],
-        "mime_type": row["mime_type"],
-        "sha256": row["sha256"],
-        "format": row["format"],
-    }
+    return AttachmentDescriptor(
+        id=str(row["id"]), filename=row["filename"], mime_type=row["mime_type"],
+        sha256=row["sha256"], format=row["format"],
+    ).model_dump()
+
+
+@dataclass(frozen=True)
+class RenderedExport:
+    markdown: str
+    version: int
+    format: str
+    data: bytes
 
 
 class ReportFiles:
     def __init__(self, db):
         self.db = db
 
-    async def create(self, connection, report, format):
+    async def render(self, markdown, version, format):
+        try:
+            data = await render_export(markdown, format, f"Company briefing v{version}")
+        except (ValueError, TimeoutError) as exc:
+            raise Conflict("Document could not be rendered within limits") from exc
+        return RenderedExport(markdown, version, format, data)
+
+    async def create(self, connection, report, format, rendered):
         row = await (
             await connection.execute(
                 "SELECT * FROM report_files WHERE report_id=%s AND format=%s", (report["id"], format)
@@ -29,10 +43,11 @@ class ReportFiles:
         ).fetchone()
         if row:
             return descriptor(row)
-        try:
-            data = await render_export(report["markdown"], format, f"Company briefing v{report['version']}")
-        except (ValueError, TimeoutError) as exc:
-            raise Conflict("Document could not be rendered within limits") from exc
+        if (rendered.markdown, rendered.version, rendered.format) != (
+            report["markdown"], report["version"], format,
+        ):
+            raise Conflict("Document source changed during rendering")
+        data = rendered.data
         row = {
             "id": uuid.uuid4(),
             "filename": f"briefing-v{report['version']}.{format}",
@@ -67,6 +82,21 @@ class ReportFiles:
     async def export(self, owner, run_id, report_id, format):
         if format not in MIME:
             raise NotFound()
+        snapshot = await self.db.one(
+            """SELECT r.* FROM reports r JOIN research_runs run ON run.id=r.run_id
+            WHERE r.id=%s AND r.run_id=%s AND r.owner=%s AND run.owner=%s
+            AND run.history_purged_at IS NULL""", (report_id, run_id, owner, owner),
+        )
+        if not snapshot:
+            raise NotFound()
+        existing = await self.db.one(
+            """SELECT f.* FROM report_files f JOIN research_runs run ON run.id=%s
+            WHERE f.report_id=%s AND f.owner=%s AND f.format=%s AND run.history_purged_at IS NULL""",
+            (run_id, report_id, owner, format),
+        )
+        if existing:
+            return descriptor(existing)
+        rendered = await self.render(snapshot["markdown"], snapshot["version"], format)
         async with self.db.transaction() as connection:
             run = await (
                 await connection.execute(
@@ -85,7 +115,7 @@ class ReportFiles:
             ).fetchone()
             if not report:
                 raise NotFound()
-            return await self.create(connection, report, format)
+            return await self.create(connection, report, format, rendered)
 
     async def get(self, owner, file_id):
         row = await self.db.one("SELECT * FROM report_files WHERE id=%s AND owner=%s", (file_id, owner))

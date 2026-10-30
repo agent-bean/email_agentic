@@ -3,18 +3,10 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { api } from '../lib/api';
+import { endpoints } from '../lib/api';
 import { ErrorMessage, Status } from '../components/status';
 import './knowledge.css';
 import { useI18n, type Translate } from '../lib/i18n';
-
-type SavedReport = {
-  id: string;
-  run_id: string;
-  status: string;
-  content: string;
-  created_at: string;
-};
 
 const pageSize = 12;
 
@@ -39,7 +31,7 @@ export function Knowledge() {
   const reportId = params.get('report');
   const search = params.get('q') ?? '';
   const status = ['draft', 'approved'].includes(params.get('status') ?? '') ? params.get('status')! : '';
-  const query = useQuery({ queryKey: ['knowledge'], queryFn: () => api<SavedReport[]>('/knowledge') });
+  const query = useQuery({ queryKey: ['knowledge'], queryFn: ({ signal }) => endpoints.knowledge(signal) });
   const reports = query.data ?? [];
   const filtered = reports.filter((report) => (!status || report.status === status)
     && `${reportTitle(report.content, t)}\n${report.content}`.toLocaleLowerCase(locale).includes(search.trim().toLocaleLowerCase(locale)));
