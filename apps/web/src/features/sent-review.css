@@ -1,0 +1,34 @@
+.sent-receipt-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: var(--s3);
+}
+.sent-receipt-heading h2 {
+  flex: 1 1 50%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  margin-bottom: 0;
+}
+.sent-recipients span { display: block; overflow-wrap: anywhere; }
+.sent-body { margin-block: var(--s4); }
+.sent-email-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  max-width: var(--reading);
+  padding: var(--s5);
+  margin-top: var(--s3);
+  background: var(--bg);
+  border-radius: var(--radius);
+}
+.sent-technical { font-size: var(--sm); color: var(--muted); overflow-wrap: anywhere; }
+.sent-verification {
+  border-left: var(--s1) solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: var(--small-radius);
+  padding: var(--s4);
+  margin-block: var(--s4);
+}
+.sent-pagination { justify-content: space-between; margin-top: var(--s5); }

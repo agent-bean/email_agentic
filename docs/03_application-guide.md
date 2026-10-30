@@ -12,6 +12,12 @@ Do not run a local worker against the production mailbox and a copied production
 
 Use the [contribution guide](08_contributing-and-quality.md) to choose checks appropriate to the change. The database-backed test helper requires local PostgreSQL and the backend image; unit tests have a separate route. Stop only processes you started or are authorized to manage. The Makefile owns stack status and shutdown commands, including shutdown that preserves volumes.
 
+## Operator workspace
+
+The interface defaults to Vietnamese. The sidebar language selector switches all interface guidance and controls between Vietnamese and English and remembers the choice in this browser. Customer messages, reports, generated drafts, and diagnostic details retain their original content.
+
+Incoming email and meetings have separate navigation and filters. Open a source to read its content before creating research. Email sending history distinguishes requests from confirmed delivery; checking Gmail is an explicit read-only action, and a search miss does not establish that delivery failed. The knowledge library offers search, status filters, pagination, and one report reader at a time. Search covers the newest 100 records returned by the API; it is not a complete archive search.
+
 ## Review and publication decisions
 
 - Preserve the customer's original email separately from research instructions. Do not reconstruct it from old context. Calendar and attachment inputs retain their own provenance.

@@ -5,23 +5,25 @@ import { api, post, type Run, type ResearchInput } from "../lib/api";
 import { ErrorMessage, Status } from "../components/status";
 import { Attachments, MeetingSource, type SourceInput } from "./inbox";
 import { Icon } from "../components/icon";
-
-const filters = [
-  ["all", "Tất cả"],
-  ["awaiting_identity", "Cần xác nhận"],
-  ["active", "Đang xử lý"],
-  ["draft_ready", "Có báo cáo"],
-  ["failed", "Có lỗi"],
-] as const;
-const nextAction: Record<string, string> = {
-  awaiting_identity: "Xác nhận doanh nghiệp",
-  running: "Theo dõi tiến độ",
-  queued: "Theo dõi hàng đợi",
-  draft_ready: "Mở báo cáo & gói duyệt",
-  failed: "Kiểm tra lỗi",
-};
+import { useI18n } from "../lib/i18n";
 
 export function Overview() {
+  const { t, locale } = useI18n();
+  const filters = [
+    ["all", t('Tất cả', 'All')],
+    ["awaiting_identity", t('Cần xác nhận', 'Needs confirmation')],
+    ["active", t('Đang xử lý', 'In progress')],
+    ["draft_ready", t('Có báo cáo', 'Report ready')],
+    ["failed", t('Có lỗi', 'Failed')],
+  ] as const;
+  const nextAction: Record<string, string> = {
+    awaiting_identity: t('Xác nhận doanh nghiệp', 'Confirm company'),
+    running: t('Theo dõi tiến độ', 'Track progress'),
+    queued: t('Theo dõi hàng đợi', 'View queue'),
+    draft_ready: t('Mở báo cáo & gói duyệt', 'Open report & approval package'),
+    failed: t('Kiểm tra lỗi', 'Review error'),
+  };
+
   const [params, setParams] = useSearchParams();
   const urlSearch = params.get("q") ?? "";
   const [search, setSearch] = useState(urlSearch);
@@ -62,8 +64,8 @@ export function Overview() {
       return (
         matchesStatus &&
         `${run.company_name} ${run.domain}`
-          .toLocaleLowerCase("vi")
-          .includes(search.toLocaleLowerCase("vi").trim())
+          .toLocaleLowerCase(locale)
+          .includes(search.toLocaleLowerCase(locale).trim())
       );
     })
     .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
@@ -72,45 +74,45 @@ export function Overview() {
     <>
       <header>
         <div>
-          <p className="eyebrow">KHÔNG GIAN LÀM VIỆC / TỔNG QUAN</p>
-          <h1>Sẵn sàng cho cuộc trao đổi tiếp theo.</h1>
+          <p className="eyebrow">{t('KHÔNG GIAN LÀM VIỆC / TỔNG QUAN', 'WORKSPACE / OVERVIEW')}</p>
+          <h1>{t('Sẵn sàng cho cuộc trao đổi tiếp theo.', 'Ready for your next conversation.')}</h1>
           <p className="muted">
-            Từ email đầu tiên đến báo cáo có nguồn và phản hồi được duyệt.
+            {t('Từ email đầu tiên đến báo cáo có nguồn và phản hồi được duyệt.', 'From the first email to a sourced report and an approved reply.')}
           </p>
         </div>
         <Link className="button" to="/research/new">
           <Icon name="research" />
-          Nghiên cứu mới
+          {t('Nghiên cứu mới', 'New research')}
         </Link>
       </header>
-      <section className="workflow-banner" aria-label="Quy trình làm việc">
+      <section className="workflow-banner" aria-label={t('Quy trình làm việc', 'Workflow')}>
         <div>
           <span className="step-number">01</span>
-          <strong>Thu thập & nghiên cứu</strong>
-          <p>Email, lịch họp và nguồn doanh nghiệp</p>
+          <strong>{t('Thu thập & nghiên cứu', 'Collect & research')}</strong>
+          <p>{t('Email, lịch họp và nguồn doanh nghiệp', 'Email, meetings and company sources')}</p>
         </div>
         <div>
           <span className="step-number">02</span>
-          <strong>Kiểm tra & duyệt</strong>
-          <p>Báo cáo nội bộ, email và người nhận</p>
+          <strong>{t('Kiểm tra & duyệt', 'Review & approve')}</strong>
+          <p>{t('Báo cáo nội bộ, email và người nhận', 'Internal report, email and recipients')}</p>
         </div>
         <div>
           <span className="step-number">03</span>
-          <strong>Gửi & lưu theo lựa chọn</strong>
-          <p>Chỉ thực hiện đúng gói đã duyệt</p>
+          <strong>{t('Gửi & lưu theo lựa chọn', 'Send & save your selection')}</strong>
+          <p>{t('Chỉ thực hiện đúng gói đã duyệt', 'Only the approved package is executed')}</p>
         </div>
       </section>
-      <section className="stats" aria-label="Tóm tắt nghiên cứu">
+      <section className="stats" aria-label={t('Tóm tắt nghiên cứu', 'Research summary')}>
         <article>
-          <span>Tổng nghiên cứu</span>
+          <span>{t('Tổng nghiên cứu', 'Total research')}</span>
           <strong>{query.data ? runs.length : "—"}</strong>
         </article>
         <article>
-          <span>Cần xác nhận doanh nghiệp</span>
+          <span>{t('Cần xác nhận doanh nghiệp', 'Company confirmation needed')}</span>
           <strong>{query.data ? pending.length : "—"}</strong>
         </article>
         <article>
-          <span>Đã có bản báo cáo</span>
+          <span>{t('Đã có bản báo cáo', 'Reports ready')}</span>
           <strong>
             {query.data
               ? runs.filter((r) => r.status === "draft_ready").length
@@ -121,11 +123,11 @@ export function Overview() {
       {pending.length > 0 && (
         <section className="attention-strip">
           <div>
-            <strong>{pending.length} nghiên cứu đang chờ bạn xác nhận</strong>
-            <p>Kiểm tra tên và domain để trợ lý bắt đầu thu thập thông tin.</p>
+            <strong>{pending.length} {t('nghiên cứu đang chờ bạn xác nhận', 'research items await your confirmation')}</strong>
+            <p>{t('Kiểm tra tên và domain để trợ lý bắt đầu thu thập thông tin.', 'Check the name and domain so the assistant can start gathering information.')}</p>
           </div>
           <Link className="button secondary" to={`/research/${pending[0].id}`}>
-            Xác nhận doanh nghiệp
+            {t('Xác nhận doanh nghiệp', 'Confirm company')}
             <Icon name="arrow" />
           </Link>
         </section>
@@ -133,17 +135,17 @@ export function Overview() {
       <section className="panel research-list-panel">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">DANH SÁCH CÔNG VIỆC</p>
-            <h2>Nghiên cứu gần đây</h2>
+            <p className="eyebrow">{t('DANH SÁCH CÔNG VIỆC', 'WORK LIST')}</p>
+            <h2>{t('Nghiên cứu gần đây', 'Recent research')}</h2>
           </div>
-          <span className="muted">Mới nhất trước</span>
+          <span className="muted">{t('Mới nhất trước', 'Newest first')}</span>
         </div>
         <div className="list-toolbar">
           <label className="search-field">
-            <span>Tìm nghiên cứu</span>
+            <span>{t('Tìm nghiên cứu', 'Search research')}</span>
             <input
               type="search"
-              placeholder="Tên doanh nghiệp hoặc domain…"
+              placeholder={t('Tên doanh nghiệp hoặc domain…', 'Company name or domain…')}
               value={search}
               onChange={(event) => {
                 const value = event.target.value;
@@ -153,7 +155,7 @@ export function Overview() {
               }}
             />
           </label>
-          <div className="filter-tabs" aria-label="Lọc trạng thái">
+          <div className="filter-tabs" aria-label={t('Lọc trạng thái', 'Filter by status')}>
             {filters.map(([value, label]) => (
               <button
                 key={value}
@@ -169,32 +171,31 @@ export function Overview() {
         <ErrorMessage error={query.error} />
         {query.isPending ? (
           <div className="loading-state" role="status">
-            <span>Đang tải nghiên cứu…</span>
+            <span>{t('Đang tải nghiên cứu…', 'Loading research…')}</span>
             <div className="skeleton" />
             <div className="skeleton" />
             <div className="skeleton" />
           </div>
         ) : query.isError ? (
           <button className="secondary" onClick={() => void query.refetch()}>
-            Thử lại
+            {t('Thử lại', 'Retry')}
           </button>
         ) : runs.length === 0 ? (
           <div className="empty">
             <Icon name="research" />
-            <h3>Bắt đầu từ một doanh nghiệp.</h3>
+            <h3>{t('Bắt đầu từ một doanh nghiệp.', 'Start with a company.')}</h3>
             <p>
-              Chọn email, cuộc họp hoặc nhập thông tin để tạo nghiên cứu đầu
-              tiên.
+              {t('Chọn email, cuộc họp hoặc nhập thông tin để tạo nghiên cứu đầu tiên.', 'Choose an email or meeting, or enter details to create your first research.')}
             </p>
             <Link className="button secondary" to="/inputs">
-              Chọn email hoặc cuộc họp
+              {t('Chọn email hoặc cuộc họp', 'Choose an email or meeting')}
               <Icon name="arrow" />
             </Link>
           </div>
         ) : visibleRuns.length === 0 ? (
           <div className="empty">
-            <h3>Không có nghiên cứu phù hợp</h3>
-            <p>Thử tên hoặc domain khác, hoặc bỏ bộ lọc trạng thái.</p>
+            <h3>{t('Không có nghiên cứu phù hợp', 'No matching research')}</h3>
+            <p>{t('Thử tên hoặc domain khác, hoặc bỏ bộ lọc trạng thái.', 'Try another name or domain, or clear the status filter.')}</p>
             <button
               className="secondary"
               onClick={() => {
@@ -203,13 +204,13 @@ export function Overview() {
                 setParams({});
               }}
             >
-              Xóa bộ lọc
+              {t('Xóa bộ lọc', 'Clear filters')}
             </button>
           </div>
         ) : (
           <>
             <p className="list-count muted" role="status">
-              {visibleRuns.length} / {runs.length} nghiên cứu
+              {visibleRuns.length} / {runs.length} {t('nghiên cứu', 'research items')}
             </p>
             <div className="run-list">
               {visibleRuns.map((run) => (
@@ -220,10 +221,10 @@ export function Overview() {
                   </div>
                   <div>
                     <Status value={run.status} />
-                    <small>{nextAction[run.status] ?? "Xem nghiên cứu"}</small>
+                    <small>{nextAction[run.status] ?? t('Xem nghiên cứu', 'View research')}</small>
                   </div>
                   <span className="run-date muted">
-                    {new Date(run.created_at).toLocaleString("vi-VN")}
+                    {new Date(run.created_at).toLocaleString(locale)}
                   </span>
                   <span className="run-arrow">
                     <Icon name="arrow" />
@@ -239,6 +240,7 @@ export function Overview() {
 }
 
 export function NewResearch() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const sourceId = params.get("input");
@@ -274,10 +276,10 @@ export function NewResearch() {
     <>
       <header>
         <div>
-          <p className="eyebrow">NGHIÊN CỨU DOANH NGHIỆP</p>
-          <h1>Nghiên cứu mới</h1>
+          <p className="eyebrow">{t('NGHIÊN CỨU DOANH NGHIỆP', 'COMPANY RESEARCH')}</p>
+          <h1>{t('Nghiên cứu mới', 'New research')}</h1>
           <p className="muted">
-            Xác nhận đúng doanh nghiệp, rồi thu thập thông tin có nguồn.
+            {t('Xác nhận đúng doanh nghiệp, rồi thu thập thông tin có nguồn.', 'Confirm the company, then gather sourced information.')}
           </p>
         </div>
       </header>
@@ -289,9 +291,9 @@ export function NewResearch() {
         }}
       >
         <fieldset disabled={mutation.isPending}>
-          <legend>Thông tin nghiên cứu</legend>
+          <legend>{t('Thông tin nghiên cứu', 'Research details')}</legend>
           <label>
-            Tên doanh nghiệp
+            {t('Tên doanh nghiệp', 'Company name')}
             <input
               required
               minLength={2}
@@ -300,11 +302,11 @@ export function NewResearch() {
               onChange={(e) =>
                 setInput({ ...input, company_name: e.target.value })
               }
-              placeholder="Ví dụ: FPT Software"
+              placeholder={t('Ví dụ: FPT Software', 'For example: FPT Software')}
             />
           </label>
           <label>
-            Domain chính thức
+            {t('Domain chính thức', 'Official domain')}
             <input
               required
               minLength={3}
@@ -315,14 +317,14 @@ export function NewResearch() {
               onChange={(e) => setInput({ ...input, domain: e.target.value })}
               placeholder="fptsoftware.com"
             />
-            <small>Chỉ nhập domain, không có https:// hoặc đường dẫn.</small>
+            <small>{t('Chỉ nhập domain, không có https:// hoặc đường dẫn.', 'Enter only the domain, without https:// or a path.')}</small>
           </label>
           {sourceId ? (
             <section>
               <h2>
                 {source.data?.kind === "meeting"
-                  ? "Cuộc họp từ Google Calendar"
-                  : "Email từ Gmail"}
+                  ? t('Cuộc họp từ Google Calendar', 'Meeting from Google Calendar')
+                  : t('Email từ Gmail', 'Email from Gmail')}
               </h2>
               <ErrorMessage error={source.error} />
               {source.isError && (
@@ -332,11 +334,11 @@ export function NewResearch() {
                   disabled={source.isFetching}
                   onClick={() => void source.refetch()}
                 >
-                  Tải lại nguồn
+                  {t('Tải lại nguồn', 'Reload source')}
                 </button>
               )}
               {source.isPending ? (
-                <p role="status">Đang tải nguồn…</p>
+                <p role="status">{t('Đang tải nguồn…', 'Loading source…')}</p>
               ) : (
                 source.data && (
                   <>
@@ -351,8 +353,7 @@ export function NewResearch() {
                       items={source.data.content.attachments ?? []}
                     />
                     <p className="muted">
-                      Ứng dụng giữ nguyên nguồn đã chọn. Nhập đúng doanh nghiệp
-                      cần nghiên cứu ở phía trên.
+                      {t('Ứng dụng giữ nguyên nguồn đã chọn. Nhập đúng doanh nghiệp cần nghiên cứu ở phía trên.', 'The selected source is preserved. Enter the company to research above.')}
                     </p>
                   </>
                 )
@@ -360,7 +361,7 @@ export function NewResearch() {
             </section>
           ) : (
             <label>
-              Email gốc (không bắt buộc)
+              {t('Email gốc (không bắt buộc)', 'Original email (optional)')}
               <textarea
                 rows={8}
                 maxLength={30000}
@@ -371,28 +372,28 @@ export function NewResearch() {
                     source_email: e.target.value === "" ? null : e.target.value,
                   })
                 }
-                placeholder="Dán nguyên văn email khách gửi, gồm tiêu đề và nội dung…"
+                placeholder={t('Dán nguyên văn email khách gửi, gồm tiêu đề và nội dung…', 'Paste the customer email exactly, including its subject and body…')}
               />
               <small>
-                Chọn email trực tiếp từ Gmail tại{" "}
+                {t('Chọn email trực tiếp từ Gmail tại', 'Choose an email directly from Gmail in')}{" "}
                 <Link className="source-picker-link" to="/inputs">
-                  Email & cuộc họp
+                  {t('Email & cuộc họp', 'Email & meetings')}
                 </Link>
                 .
               </small>
             </label>
           )}
           <label>
-            Yêu cầu nghiên cứu (không bắt buộc)
+            {t('Yêu cầu nghiên cứu (không bắt buộc)', 'Research instructions (optional)')}
             <textarea
               rows={5}
               maxLength={12000}
               value={input.context ?? ""}
               onChange={(e) => setInput({ ...input, context: e.target.value })}
-              placeholder="Cần tìm hiểu gì về doanh nghiệp? Mục tiêu cuộc trao đổi là gì?"
+              placeholder={t('Cần tìm hiểu gì về doanh nghiệp? Mục tiêu cuộc trao đổi là gì?', 'What should we find out about this company? What is the goal of the conversation?')}
             />
             <small>
-              Hướng dẫn riêng cho trợ lý; không phải lời khách gửi trong email.
+              {t('Hướng dẫn riêng cho trợ lý; không phải lời khách gửi trong email.', 'Private instructions for the assistant, separate from the customer email.')}
             </small>
           </label>
         </fieldset>
@@ -407,7 +408,7 @@ export function NewResearch() {
             )
           }
         >
-          {mutation.isPending ? "Đang tạo…" : "Tạo nghiên cứu"}
+          {mutation.isPending ? t('Đang tạo…', 'Creating…') : t('Tạo nghiên cứu', 'Create research')}
         </button>
       </form>
     </>

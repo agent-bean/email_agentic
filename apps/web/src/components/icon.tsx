@@ -2,6 +2,7 @@ const paths = {
   overview: "M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z",
   research: "M12 5v14 M5 12h14",
   inbox: "M3 5h18v14H3z M3 6l9 7 9-7",
+  calendar: "M4 5h16v16H4z M4 10h16 M8 3v4 M16 3v4 M8 14h2 M14 14h2 M8 18h2",
   sent: "M4 12a8 8 0 1 1 2 5 M4 17v-5h5 M9 11l3 3 5-5",
   company:
     "M5 21V3h14v18 M2 21h20 M9 7h1 M14 7h1 M9 11h1 M14 11h1 M10 21v-5h4v5",

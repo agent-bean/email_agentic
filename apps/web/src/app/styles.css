@@ -419,6 +419,7 @@ label {
   font-weight: 500;
 }
 input,
+select,
 textarea {
   font: inherit;
   color: inherit;
@@ -434,6 +435,7 @@ textarea {
   line-height: 1.7;
 }
 input:focus,
+select:focus,
 textarea:focus {
   outline: none;
   border-color: var(--accent);
@@ -916,6 +918,7 @@ dd {
     align-items: flex-start;
   }
   input,
+  select,
   textarea {
     font-size: 16px;
   }
@@ -1651,4 +1654,26 @@ aside .nav-toggle:hover {
   background: var(--nav-line);
   color: var(--nav-ink);
   border-color: var(--nav-muted);
+}
+
+.language-picker {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  margin-block: var(--s3);
+  color: var(--nav-muted);
+  font-size: var(--sm);
+}
+.language-picker select {
+  min-height: var(--control);
+  min-width: 0;
+  width: auto;
+  flex: 1;
+  color: var(--nav-ink);
+  background: var(--nav-selected);
+  border-color: var(--nav-line);
+}
+.language-picker option {
+  color: var(--ink);
+  background: var(--surface);
 }
