@@ -1,13 +1,15 @@
 import { I18nProvider, useI18n } from "../lib/i18n";
-import { useEffect, useRef, useState } from "react";
+import { lazy, useEffect, useRef, useState } from "react";
 import { Link, NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { Icon } from "../components/icon";
 import { Overview, NewResearch } from "../features/research";
-import { ResearchDetail } from "../features/research-detail";
+import { RouteBoundary } from "../components/route-boundary";
 import { Collection, System } from "../features/collections";
 import { SentReview } from "../features/sent-review";
 import { Inbox } from "../features/inbox";
-import { Knowledge } from "../features/knowledge";
+
+const ResearchDetail = lazy(() => import("../features/research-detail").then(module => ({ default: module.ResearchDetail })));
+const Knowledge = lazy(() => import("../features/knowledge").then(module => ({ default: module.Knowledge })));
 
 export function App() {
   return <I18nProvider><Workspace /></I18nProvider>;
@@ -128,7 +130,7 @@ function Workspace() {
         <Routes>
           <Route path="/" element={<Overview />} />
           <Route path="/research/new" element={<NewResearch />} />
-          <Route path="/research/:id" element={<ResearchDetail />} />
+          <Route path="/research/:id" element={<RouteBoundary key={location.pathname}><ResearchDetail /></RouteBoundary>} />
           <Route path="/inputs" element={<Inbox />} />
           <Route path="/sent-review" element={<SentReview />} />
           <Route
@@ -137,7 +139,7 @@ function Workspace() {
           />
           <Route
             path="/knowledge"
-            element={<Knowledge />}
+            element={<RouteBoundary key={location.pathname}><Knowledge /></RouteBoundary>}
           />
           <Route path="/system" element={<System />} />
           <Route

@@ -51,6 +51,16 @@ describe('navigation menu keyboard behavior', () => {
     await user.click(screen.getByRole('link', { name: 'Về tổng quan' }));
     expect(await screen.findByRole('heading', { name: 'Sẵn sàng cho cuộc trao đổi tiếp theo.' })).toBeVisible();
   });
+
+  it('opens the deferred knowledge route from the workspace navigation', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => Response.json([])));
+    const user = userEvent.setup();
+    renderApp();
+    await user.click(within(screen.getByRole('navigation')).getByRole('link', { name: 'Kho tri thức' }));
+    expect(await screen.findByRole('heading', { name: 'Chưa có báo cáo được lưu' })).toBeVisible();
+    expect(document.title).toBe('Kho tri thức · Email Assistant');
+    expect(within(screen.getByRole('navigation')).getByRole('link', { name: 'Kho tri thức' })).toHaveAttribute('aria-current', 'page');
+  });
 });
 
 describe('interface language', () => {
