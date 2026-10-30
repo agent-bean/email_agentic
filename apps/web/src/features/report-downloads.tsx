@@ -46,4 +46,3 @@ export function ReportDownloads({ report, runId }: { report: Report; runId: stri
     </section>
   );
 }
-

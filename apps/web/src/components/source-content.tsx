@@ -97,4 +97,3 @@ export function meetingEndDate(event: MeetingEvent) {
   date.setUTCDate(date.getUTCDate() - 1);
   return date.toISOString().slice(0, 10);
 }
-
