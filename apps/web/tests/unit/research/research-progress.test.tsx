@@ -6,9 +6,9 @@ import { ResearchProgress } from '../../../src/components/research-progress';
 describe('research progress safety guidance', () => {
   it('prioritizes uncertain sending over approval and directs the user to reconciliation', () => {
     render(<MemoryRouter><ResearchProgress status="draft_ready" hasReport approvalStatus="approved" expired={false} hasUnknownAction /></MemoryRouter>);
-    expect(screen.getByText('Cần đối chiếu kết quả gửi')).toBeVisible();
-    expect(screen.getByText(/Đối chiếu Sent trước khi quyết định gửi lại/)).toBeVisible();
-    expect(screen.getByRole('link', { name: 'Đối chiếu Sent' })).toHaveAttribute('href', '/sent-review');
+    expect(screen.getByText('Cần kiểm tra email đã gửi')).toBeVisible();
+    expect(screen.getByText(/Kiểm tra lịch sử gửi trước khi quyết định gửi lại/)).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Kiểm tra lịch sử gửi' })).toHaveAttribute('href', '/sent-review');
     expect(screen.queryByRole('link', { name: /Xem gói duyệt/ })).not.toBeInTheDocument();
   });
 

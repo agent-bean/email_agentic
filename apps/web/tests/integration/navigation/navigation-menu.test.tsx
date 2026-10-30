@@ -2,13 +2,15 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../../src/app/app';
 
 function renderApp(path = '/research/new') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   render(<QueryClientProvider client={client}><MemoryRouter initialEntries={[path]}><App /></MemoryRouter></QueryClientProvider>);
 }
+
+afterEach(() => localStorage.clear());
 
 describe('navigation menu keyboard behavior', () => {
   it('closes on Escape from a navigation link and returns focus to its toggle', async () => {
@@ -48,5 +50,28 @@ describe('navigation menu keyboard behavior', () => {
     expect(screen.getByRole('heading', { name: 'Không tìm thấy trang' })).toBeVisible();
     await user.click(screen.getByRole('link', { name: 'Về tổng quan' }));
     expect(await screen.findByRole('heading', { name: 'Sẵn sàng cho cuộc trao đổi tiếp theo.' })).toBeVisible();
+  });
+});
+
+describe('interface language', () => {
+  it('defaults to Vietnamese, switches the shell and form, and remembers English', async () => {
+    const user = userEvent.setup();
+    renderApp();
+    expect(document.documentElement.lang).toBe('vi');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Ngôn ngữ' }), 'en');
+    expect(document.documentElement.lang).toBe('en');
+    expect(document.title).toBe('New research · Email Assistant');
+    expect(screen.getByRole('navigation', { name: 'Main navigation' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Incoming email' })).toHaveAttribute('href', '/inputs?kind=email');
+    expect(screen.getByRole('link', { name: 'Meetings' })).toHaveAttribute('href', '/inputs?kind=calendar');
+    expect(localStorage.getItem('email-assistant-language')).toBe('en');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Language' }), 'vi');
+    expect(document.title).toBe('Nghiên cứu mới · Email Assistant');
+  });
+  it('restores a saved English choice on mount', () => {
+    localStorage.setItem('email-assistant-language', 'en');
+    renderApp('/obsolete');
+    expect(screen.getByRole('heading', { name: 'Page not found' })).toBeVisible();
+    expect(document.documentElement.lang).toBe('en');
   });
 });

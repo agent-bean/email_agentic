@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { api, type Report, type ReportEdit } from "../lib/api";
+import { useI18n } from "../lib/i18n";
 import { ErrorMessage } from "../components/status";
 
 export function ReportEditor({
@@ -14,6 +15,7 @@ export function ReportEditor({
   refresh: () => void;
   onDirty: (dirty: boolean) => void;
 }) {
+  const { t } = useI18n();
   const initial: ReportEdit = {
     version: report.version,
     markdown: report.markdown,
@@ -79,7 +81,7 @@ export function ReportEditor({
         return;
       if (
         !window.confirm(
-          "Có thay đổi chưa lưu. Rời trang và bỏ các thay đổi này?",
+          t("Có thay đổi chưa lưu. Rời trang và bỏ các thay đổi này?", "You have unsaved changes. Leave this page and discard them?"),
         )
       ) {
         event.preventDefault();
@@ -92,7 +94,7 @@ export function ReportEditor({
       window.removeEventListener("beforeunload", warn);
       document.removeEventListener("click", guardNavigation, true);
     };
-  }, [dirty]);
+  }, [dirty, t]);
   const save = useMutation({
     mutationFn: () =>
       api(`/runs/${runId}/report`, {
@@ -103,7 +105,7 @@ export function ReportEditor({
   });
   return (
     <details id="report-editor" className="panel editor">
-      <summary>Chỉnh sửa nội dung & tùy chọn</summary>
+      <summary>{t("Chỉnh sửa nội dung & tùy chọn", "Edit content & options")}</summary>
       <form
         className="form"
         onSubmit={(e) => {
@@ -112,13 +114,12 @@ export function ReportEditor({
         }}
       >
         <p className="muted">
-          Lưu sẽ tạo phiên bản mới và yêu cầu duyệt lại. Bản đang chỉnh sửa chưa
-          được dùng để gửi.
+          {t("Lưu sẽ tạo phiên bản mới và yêu cầu duyệt lại. Bản đang chỉnh sửa chưa được dùng để gửi.", "Saving creates a new version that requires approval again. Unsaved edits are not used for sending.")}
         </p>
         <fieldset disabled={save.isPending}>
-          <legend>Báo cáo · nội bộ</legend>
+          <legend>{t("Báo cáo · nội bộ", "Report \u00b7 internal")}</legend>
           <label>
-            Nội dung Markdown
+            {t("Nội dung Markdown", "Markdown content")}
             <textarea
               rows={16}
               value={edit.markdown}
@@ -127,9 +128,9 @@ export function ReportEditor({
           </label>
         </fieldset>
         <fieldset disabled={save.isPending}>
-          <legend>Email nháp · gửi khách / đối tác</legend>
+          <legend>{t("Email nháp · gửi khách / đối tác", "Draft email \u00b7 for customers / partners")}</legend>
           <label>
-            Tiêu đề email
+            {t("Tiêu đề email", "Email subject")}
             <input
               value={edit.email_subject}
               onChange={(e) =>
@@ -138,7 +139,7 @@ export function ReportEditor({
             />
           </label>
           <label>
-            Nội dung email
+            {t("Nội dung email", "Email body")}
             <textarea
               rows={9}
               value={edit.email_body}
@@ -147,8 +148,8 @@ export function ReportEditor({
           </label>
         </fieldset>
         <fieldset disabled={save.isPending}>
-          <legend>Người nhận</legend>
-          <p className="muted">Phân cách các địa chỉ bằng dấu phẩy.</p>
+          <legend>{t("Người nhận", "Recipients")}</legend>
+          <p className="muted">{t("Phân cách các địa chỉ bằng dấu phẩy.", "Separate addresses with commas.")}</p>
           {(["to", "cc", "bcc"] as const).map((key) => (
             <label key={key}>
               {key.toUpperCase()}
@@ -164,7 +165,7 @@ export function ReportEditor({
           ))}
         </fieldset>
         <fieldset disabled={save.isPending}>
-          <legend>Sau khi duyệt</legend>
+          <legend>{t("Sau khi duyệt", "After approval")}</legend>
           <label className="check">
             <input
               type="checkbox"
@@ -173,7 +174,7 @@ export function ReportEditor({
                 setEdit({ ...edit, send_email: e.target.checked })
               }
             />
-            Gửi email tới người nhận
+            {t("Gửi email tới người nhận", "Send email to recipients")}
           </label>
           <label className="check">
             <input
@@ -181,15 +182,13 @@ export function ReportEditor({
               checked={edit.save_kb}
               onChange={(e) => setEdit({ ...edit, save_kb: e.target.checked })}
             />
-            Lưu báo cáo vào kho tri thức
+            {t("Lưu báo cáo vào kho tri thức", "Save report to knowledge library")}
           </label>
         </fieldset>
         <fieldset disabled={save.isPending}>
-          <legend>File đính kèm email</legend>
+          <legend>{t("File đính kèm email", "Email attachments")}</legend>
           <p className="notice">
-            Báo cáo chứa phân tích nội bộ. Chỉ chọn đính kèm khi nội dung phù
-            hợp với người nhận. Lưu phiên bản mới rồi mở file bên dưới để kiểm
-            tra trước khi duyệt.
+            {t("Báo cáo chứa phân tích nội bộ. Chỉ chọn đính kèm khi nội dung phù hợp với người nhận. Lưu phiên bản mới rồi mở file bên dưới để kiểm tra trước khi duyệt.", "Reports contain internal analysis. Attach only when the content is suitable for the recipient. Save a new version, then open the file below to review it before approval.")}
           </p>
           {(["pdf", "docx", "md"] as const).map((format) => (
             <label className="check" key={format}>
@@ -212,10 +211,10 @@ export function ReportEditor({
         <ErrorMessage error={save.error} />
         <div className="save-bar">
           <span className="muted" role="status">
-            {dirty ? "Có thay đổi chưa lưu" : "Chưa có thay đổi"}
+            {dirty ? t("Có thay đổi chưa lưu", "Unsaved changes") : t("Chưa có thay đổi", "No changes")}
           </span>
           <button disabled={save.isPending || !dirty}>
-            {save.isPending ? "Đang lưu…" : "Lưu phiên bản mới"}
+            {save.isPending ? t("Đang lưu…", "Saving\u2026") : t("Lưu phiên bản mới", "Save new version")}
           </button>
         </div>
       </form>

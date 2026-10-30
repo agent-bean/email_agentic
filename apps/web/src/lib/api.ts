@@ -5,6 +5,18 @@ export type Report = components['schemas']['ReportRow'];
 export type ReportEdit = components['schemas']['ReportEdit'];
 export type ResearchInput = components['schemas']['ResearchRequest'];
 
+export class ApiError extends Error {
+  readonly status: number;
+  readonly detail: string | null;
+
+  constructor(status: number, detail: string | null = null) {
+    super(detail ?? `Yêu cầu không thành công (${status}).`);
+    this.name = 'ApiError';
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch('/api/v1' + path, {
     ...init,
@@ -12,10 +24,9 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(
-      typeof body.detail === 'string'
-        ? body.detail
-        : `Yêu cầu không thành công (${response.status}).`,
+    throw new ApiError(
+      response.status,
+      typeof body?.detail === 'string' ? body.detail : null,
     );
   }
   return response.json();

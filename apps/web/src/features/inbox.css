@@ -1,0 +1,27 @@
+.inbox-tabs { display: flex; gap: var(--s2); margin-bottom: var(--s5); }
+.inbox-tabs a { display: inline-flex; align-items: center; gap: var(--s2); padding: var(--s3) var(--s4); border-bottom: 2px solid transparent; }
+.inbox-tabs a[aria-current="page"] { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.inbox-toolbar { display: flex; align-items: end; gap: var(--s4); flex-wrap: wrap; margin-bottom: var(--s5); }
+.inbox-toolbar > label:first-child { flex: 1; min-width: min(100%, 20rem); }
+.inbox-record { padding-block: var(--s6); }
+.inbox-record-heading { display: flex; align-items: start; gap: var(--s3); }
+.inbox-record-heading > div { flex: 1; min-width: 0; }
+.inbox-record-heading h2 { margin-top: 0; overflow-wrap: anywhere; }
+.inbox-source-icon { display: inline-flex; padding: var(--s2); color: var(--accent); background: var(--accent-soft); border-radius: var(--small-radius); }
+.inbox-meeting .inbox-source-icon { color: var(--success); background: var(--success-soft); }
+.inbox-email-meta { display: flex; gap: var(--s3); flex-wrap: wrap; color: var(--muted); overflow-wrap: anywhere; }
+.inbox-snippet { color: var(--muted); max-width: var(--reading); overflow-wrap: anywhere; }
+.inbox-meeting-facts { display: flex; flex-wrap: wrap; gap: var(--s4) var(--s8); }
+.inbox-meeting-facts > div { min-width: 0; }
+.inbox-meeting-facts dt { color: var(--muted); font-size: var(--sm); }
+.inbox-meeting-facts dd { margin: 0; overflow-wrap: anywhere; }
+.inbox-reader { margin-top: var(--s4); padding: var(--s4); background: var(--bg); border-left: 2px solid var(--accent); max-width: var(--reading); overflow-wrap: anywhere; }
+.inbox-next-step { margin-top: var(--s3); }
+.inbox-next-step p { margin-block: var(--s2); }
+.inbox-pagination { display: flex; justify-content: space-between; align-items: center; gap: var(--s3); flex-wrap: wrap; padding-top: var(--s5); }
+@media (max-width: 600px) {
+  .inbox-record-heading { flex-wrap: wrap; }
+  .inbox-record-heading > .badge { margin-left: var(--s12); }
+  .inbox-pagination { justify-content: start; }
+  .inbox-pagination span { order: -1; width: 100%; }
+}
