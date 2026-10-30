@@ -1,19 +1,19 @@
 import { useI18n, type Translate } from '../lib/i18n';
 import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { api, post, type Detail, type Report } from "../lib/api";
+import { useResearchDetail } from "./use-research-detail";
+import { ApiError } from "../lib/api";
+import { ReportDownloads } from "./report-downloads";
 import { ErrorMessage, Status } from "../components/status";
-import { ReportEditor } from "./report-editor";
+import { RetainedReportEditor } from "./report-editor";
 import { ResearchProgress } from "../components/research-progress";
 import {
   Attachments,
   MeetingSource,
-  type MeetingEvent,
-  type SourceMessage,
-} from "./inbox";
+} from "../components/source-content";
 
 const getQualityLabels = (t: Translate): Record<string, string> => ({
   cited_sources: t("Nguồn trích dẫn", "Cited sources"),
@@ -76,51 +76,6 @@ const getBranchLabels = (t: Translate): Record<string, string> => ({
   knowledge: t("Kho tri thức", "Knowledge"),
 });
 
-function ReportDownloads({ report, runId }: { report: Report; runId: string }) {
-  const { t } = useI18n();
-  const [file, setFile] = useState<{ id: string; filename: string } | null>(
-    null,
-  );
-  const download = useMutation({
-    mutationFn: (format: string) =>
-      post<{ id: string; filename: string }>(
-        `/runs/${runId}/reports/${report.id}/exports/${format}`,
-      ),
-    onSuccess: setFile,
-  });
-  return (
-    <section className="panel">
-      <h2>{t("Tải báo cáo", "Download report")}</h2>
-      <p className="muted">{' ' + t("Xuất đúng phiên bản v", "Export version v")}{report.version}{t(". Tải file không duyệt hoặc gửi email.", ". Downloading does not approve or send email.") + ' '}</p>
-      <div className="actions">
-        {(["pdf", "docx", "md"] as const).map((format) => (
-          <button
-            className="secondary"
-            key={format}
-            disabled={download.isPending}
-            onClick={() => download.mutate(format)}
-          >
-            {download.isPending && download.variables === format
-              ? t("Đang tạo file…", "Creating file…")
-              : format === "docx"
-                ? "Word"
-                : format.toUpperCase()}
-          </button>
-        ))}
-      </div>
-      <ErrorMessage error={download.error} />
-      {file && (
-        <a
-          href={`/api/v1/files/${file.id}`}
-          target="_blank"
-          rel="noopener noreferrer"
-        >{' ' + t("Tải", "Download") + ' '}{file.filename}
-        </a>
-      )}
-    </section>
-  );
-}
-
 export function ResearchDetail() {
   const { t, locale } = useI18n();
   const qualityLabels = getQualityLabels(t);
@@ -130,46 +85,12 @@ export function ResearchDetail() {
   const [params, setParams] = useSearchParams();
   const view = params.get("view") === "email" ? "email" : "report";
   const [dirty, setDirty] = useState(false);
-  const client = useQueryClient();
-  const refresh = () => {
-    void client.invalidateQueries({ queryKey: ["run", id] });
-    void client.invalidateQueries({ queryKey: ["runs"] });
-  };
-  const query = useQuery({
-    queryKey: ["run", id],
-    queryFn: () => api<Detail>(`/runs/${id}`),
-    refetchInterval: 3000,
-  });
-  const confirm = useMutation({
-    mutationFn: (identity: { company_name: string; domain: string }) =>
-      post(`/runs/${id}/identity`, {
-        version: query.data?.run.version,
-        ...identity,
-      }),
-    onSuccess: refresh,
-  });
-  const decision = useMutation({
-    mutationFn: ({
-      approvalId,
-      approve,
-    }: {
-      approvalId: string;
-      approve: boolean;
-    }) => post(`/approvals/${approvalId}/decision`, { approve }),
-    onSuccess: refresh,
-  });
-  const exportDraft = useMutation({
-    mutationFn: () =>
-      post(`/runs/${id}/gmail-draft`, {
-        version: query.data?.reports[0]?.version,
-      }),
-    onSuccess: refresh,
-  });
+  const { query, refresh, confirm, decision, exportDraft } = useResearchDetail(id);
   if (query.isPending)
     return (
       <section className="panel loading" role="status">{' ' + t("Đang tải nghiên cứu…", "Loading research…") + ' '}</section>
     );
-  if (!query.data)
+  if (!query.data || (query.error instanceof ApiError && [401, 403, 404].includes(query.error.status)))
     return (
       <>
         <Link className="back-link" to="/">{' ' + t("← Nghiên cứu", "← Research") + ' '}</Link>
@@ -179,8 +100,8 @@ export function ResearchDetail() {
     );
   const { run, reports, approvals, evidence, actions, branches, gmail_drafts } =
     query.data;
-  const gmailSource = run.source_message as SourceMessage | null;
-  const meeting = run.source_meeting as MeetingEvent | null;
+  const gmailSource = run.source_message;
+  const meeting = run.source_meeting;
   const report = run.history_purged_at ? undefined : reports[0];
   const emailAlreadySent = gmail_drafts.some(
     (d) => d.status === "sent" && d.matches_current === true,
@@ -484,15 +405,6 @@ export function ResearchDetail() {
                   </>
                 )}
               </section>
-              {!run.raw_purged_at && (
-                <ReportEditor
-                  key={report.id}
-                  report={report}
-                  runId={id}
-                  refresh={refresh}
-                  onDirty={setDirty}
-                />
-              )}
               <details className="panel source-panel">
                 <summary>{' ' + t("Nguồn tham khảo", "References")}{" "}
                   <span className="muted">({evidence.length})</span>
@@ -526,6 +438,8 @@ export function ResearchDetail() {
               </p>
             </section>
           )}
+          <RetainedReportEditor key={id} report={report} readOnly={Boolean(run.raw_purged_at || run.history_purged_at)}
+            runId={id} refresh={refresh} onDirty={setDirty} />
         </div>
         <div className="detail-sidebar">
           {report && (
@@ -648,8 +562,8 @@ export function ResearchDetail() {
                     <p key={action.id}>
                       {(
                         {
-                          send_email: t("Gửi email", "Send email"),
-                          save_kb: t("Lưu kho tri thức", "Save to knowledge"),
+                          email: t("Gửi email", "Send email"),
+                          kb: t("Lưu kho tri thức", "Save to knowledge"),
                         } as Record<string, string>
                       )[action.kind] ?? action.kind}
                       : <Status value={action.status} />

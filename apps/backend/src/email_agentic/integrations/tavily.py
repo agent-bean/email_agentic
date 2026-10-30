@@ -1,4 +1,4 @@
-from email_agentic.integrations.http import json_request
+from email_agentic.integrations.http import bounded_retry, json_request
 
 
 class Tavily:
@@ -22,11 +22,11 @@ class Tavily:
         }
         if news:
             body.update(time_range="month", include_published_date=True)
-        return await json_request(
-            self.client,
-            "tavily",
-            "POST",
-            "https://api.tavily.com/search",
-            headers={"Authorization": f"Bearer {self.key}"},
-            json=body,
-        )
+        async def request(remaining):
+            return await json_request(
+                self.client, "tavily", "POST", "https://api.tavily.com/search",
+                deadline_seconds=remaining, timeout=remaining,
+                headers={"Authorization": f"Bearer {self.key}"}, json=body,
+            )
+
+        return await bounded_retry(request, 45, provider="tavily", operation_key=f"{news}:{query}")

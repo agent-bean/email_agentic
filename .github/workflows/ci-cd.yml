@@ -52,6 +52,7 @@ jobs:
       - name: Lint, typecheck and web build
         run: |
           make lint
+          make api-check
           make typecheck
           make web-build
           make test-scripts

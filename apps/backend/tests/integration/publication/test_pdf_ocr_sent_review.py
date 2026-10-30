@@ -88,6 +88,7 @@ async def test_sent_review_owner_scope_and_read_only_receipts(db):
         approval = await db.one('SELECT id FROM approvals WHERE report_id=%s', (report['id'],))
         await c.approvals.decide(owner, approval['id'], True)
         action = await db.one("SELECT * FROM publication_actions WHERE approval_id=%s AND kind='email'", (approval['id'],))
+        await c.publication.package(owner, action['id'])
         await c.publication.complete(action['id'], 'unknown', error='timeout')
         before = await db.one('SELECT * FROM publication_actions WHERE id=%s', (action['id'],))
         jobs_before = await db.all('SELECT * FROM jobs WHERE owner=%s ORDER BY id', (owner,))

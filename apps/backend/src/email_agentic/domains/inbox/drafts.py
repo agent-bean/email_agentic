@@ -10,6 +10,12 @@ class GmailDrafts:
     def __init__(self, db):
         self.db = db
 
+    @staticmethod
+    async def recover(connection):
+        await connection.execute("""UPDATE gmail_drafts SET status='unknown',error_code='worker_interrupted'
+            WHERE status='running' AND id IN (SELECT entity_id FROM jobs WHERE kind='gmail_draft'
+            AND ((status='running' AND lease_until<now()) OR status IN ('failed','done')))""")
+
     async def publishing(self, connection, report):
         return await (await connection.execute(
             """SELECT p.id FROM publication_actions p JOIN approvals a ON a.id=p.approval_id
@@ -95,6 +101,8 @@ class GmailDrafts:
             )).fetchone()
             if current["status"] in {"succeeded", "blocked", "sent"}:
                 return None
+            if current["status"] not in {"pending", "failed", "running", "unknown"}:
+                raise Conflict("Invalid draft state")
             if await self.publishing(connection, row):
                 await connection.execute("UPDATE gmail_drafts SET status='blocked',error_code='email_publishing' WHERE id=%s",
                                          (draft_id,))
@@ -113,6 +121,20 @@ class GmailDrafts:
             return row
 
     async def complete(self, draft_id, status, provider_id=None, thread_id=None, error=None):
-        await self.db.execute(
-            """UPDATE gmail_drafts SET status=%s,provider_id=%s,thread_id=%s,error_code=%s,
-            updated_at=now() WHERE id=%s""", (status, provider_id, thread_id, error, draft_id))
+        if status not in {"succeeded", "failed", "unknown"}:
+            raise Conflict("Invalid draft completion state")
+        async with self.db.transaction() as connection:
+            draft = await (await connection.execute(
+                "SELECT status,provider_id,thread_id,error_code FROM gmail_drafts WHERE id=%s FOR UPDATE", (draft_id,),
+            )).fetchone()
+            if not draft:
+                raise NotFound()
+            if (draft["status"], draft["provider_id"], draft["thread_id"], draft["error_code"]) == (
+                status, provider_id, thread_id, error,
+            ):
+                return
+            if draft["status"] != "running" and not (draft["status"] == "unknown" and status == "succeeded"):
+                raise Conflict("Draft is not awaiting this completion")
+            await connection.execute(
+                """UPDATE gmail_drafts SET status=%s,provider_id=%s,thread_id=%s,error_code=%s,
+                updated_at=now() WHERE id=%s""", (status, provider_id, thread_id, error, draft_id))

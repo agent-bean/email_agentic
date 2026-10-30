@@ -6,6 +6,10 @@ class NotFound(Exception):
     pass
 
 
+class JobLeaseLost(RuntimeError):
+    pass
+
+
 class ToolDenied(Exception):
     def __init__(self, gate: str):
         self.gate = gate

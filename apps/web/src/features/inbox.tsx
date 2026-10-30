@@ -1,159 +1,17 @@
 import { Link, useSearchParams } from 'react-router-dom';
 import { Icon } from '../components/icon';
 import './inbox.css';
-import { useI18n, type Translate } from '../lib/i18n';
+import { useI18n } from '../lib/i18n';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, post } from '../lib/api';
+import { endpoints } from '../lib/api';
 import { ErrorMessage } from '../components/status';
-
-export type Attachment = {
-  filename: string;
-  size: number;
-  extraction: {
-    status: string;
-    text?: string;
-    pages?: number;
-    pages_read?: number;
-    truncated?: boolean;
-    page_results?: {
-      page: number;
-      method: string;
-      status: string;
-      text: string;
-    }[];
-  };
-};
-export type SourceMessage = {
-  id: string;
-  thread_id: string;
-  mailbox?: string;
-  subject: string;
-  source_text: string;
-  body_format: string;
-  headers: Record<string, string>;
-  attachments: Attachment[];
-};
-export type MeetingEvent = {
-  summary?: string;
-  description?: string;
-  location?: string;
-  status?: string;
-  start?: { dateTime?: string; date?: string };
-  end?: { dateTime?: string; date?: string };
-  attendees?: { email?: string; displayName?: string }[];
-};
-export function MeetingSource({ event }: { event: MeetingEvent }) {
-  const { t, locale } = useI18n();
-  return (
-    <div className="preserve">
-      <strong>{event.summary || t('Cuộc họp', 'Meeting')}</strong>
-      <p>
-        {readableDate(event.start?.dateTime || event.start?.date, locale, t)} —{' '}
-        {readableDate(meetingEndDate(event), locale, t)}
-        {!event.start?.dateTime && event.start?.date && <> · {t('Cả ngày', 'All day')}</>}
-      </p>
-      {event.status === 'cancelled' && <p>{t('Cuộc họp đã bị hủy.', 'This meeting was cancelled.')}</p>}
-      {event.location && <p>{event.location}</p>}
-      {event.description && <p>{event.description}</p>}
-      {event.attendees?.length ? (
-        <p>
-          {t('Người tham dự:', 'Attendees:')}{' '}
-          {event.attendees.map((a) => a.displayName || a.email).join(', ')}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-export type SourceInput = {
-  id: string;
-  kind: string;
-  source_id: string;
-  content: SourceMessage & MeetingEvent;
-  created_at: string;
-  calendar_available?: boolean | null;
-  intake_status?: string | null;
-  research_run_id?: string | null;
-};
-
-export function Attachments({ items }: { items: Attachment[] }) {
-  const { t } = useI18n();
-  const labels: Record<string, string> = {
-    succeeded: t('Đã đọc', 'Read'),
-    no_text: t('Không có văn bản đọc được', 'No readable text'),
-    partial: t('Đã đọc một phần', 'Partially read'),
-    ocr_unavailable: t('Chưa cài công cụ OCR', 'OCR is unavailable'),
-    ocr_timeout: t('OCR hết thời gian', 'OCR timed out'),
-    ocr_failed: t('OCR thất bại', 'OCR failed'),
-    ocr_limit_reached: t('Vượt giới hạn OCR', 'OCR limit reached'),
-    encrypted: t('PDF có mật khẩu', 'Password-protected PDF'),
-    too_large: t('Tệp quá lớn', 'File too large'),
-    unsupported_type: t('Chưa hỗ trợ định dạng này', 'Unsupported file type'),
-    limit_reached: t('Vượt giới hạn đọc tệp', 'Reading limit reached'),
-    timeout: t('Hết thời gian đọc', 'Reading timed out'),
-    invalid_pdf: t('Không đọc được PDF', 'Unreadable PDF'),
-    extraction_failed: t('Đọc tệp thất bại', 'Reading failed'),
-  };
-  return items.length ? (
-    <div>
-      <h3>{t('File đính kèm', 'Attachments')}</h3>
-      {items.map((item, index) => (
-        <details key={index} className="record">
-          <summary>
-            {item.filename} · {Math.ceil(item.size / 1024)} KB ·{' '}
-            {labels[item.extraction.status] ?? item.extraction.status}
-          </summary>
-          {item.extraction.pages != null && (
-            <p className="muted">
-              {t('Đã đọc', 'Read')} {item.extraction.pages_read}/{item.extraction.pages} {t('trang', 'pages')}
-              {item.extraction.truncated ? t('; nội dung được giới hạn', '; content is limited') : ''}.
-            </p>
-          )}
-          {item.extraction.page_results
-            ? item.extraction.page_results.map((page) => (
-                <div key={page.page}>
-                  <p className="muted">
-                    {t('Trang', 'Page')} {page.page} ·{' '}
-                    {page.method === 'ocr'
-                      ? t('OCR (cần kiểm tra lại nhận dạng)', 'OCR (check recognition accuracy)')
-                      : t('Lớp văn bản', 'Text layer')}{' '}
-                    · {labels[page.status] ?? page.status}
-                  </p>
-                  {page.text && <pre className="preserve">{page.text}</pre>}
-                </div>
-              ))
-            : item.extraction.text && (
-                <pre className="preserve">{item.extraction.text}</pre>
-              )}
-        </details>
-      ))}
-    </div>
-  ) : null;
-}
+import { Attachments, MeetingSource, readableDate, meetingEndDate } from '../components/source-content';
+import type { SourceInput } from '../lib/source-models';
 
 function sourceHeader(item: SourceInput, name: string) {
-  return Object.entries(item.content.headers ?? {}).find(
+  return Object.entries(item.kind === 'email' ? item.content.headers ?? {} : {}).find(
     ([key]) => key.toLowerCase() === name.toLowerCase(),
   )?.[1] ?? '';
-}
-
-function readableDate(value: string | undefined, locale: string, t: Translate) {
-  if (!value) return t('Chưa có thời gian', 'Time not provided');
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(locale, {
-    dateStyle: 'medium', ...(/^\d{4}-\d{2}-\d{2}$/.test(value) ? { timeZone: 'UTC' } : { timeStyle: 'short' as const }),
-  }).format(date);
-}
-
-function meetingEndDate(event: MeetingEvent) {
-  if (event.end?.dateTime) return event.end.dateTime;
-  const end = event.end?.date;
-  if (!end || !/^\d{4}-\d{2}-\d{2}$/.test(end)) return end;
-  const date = new Date(`${end}T00:00:00Z`);
-  if (Number.isNaN(date.getTime())) return end;
-  // Calendar all-day end dates are exclusive; show the last occupied day.
-  date.setUTCDate(date.getUTCDate() - 1);
-  return date.toISOString().slice(0, 10);
 }
 
 function senderAddress(from: string) {
@@ -191,10 +49,10 @@ function SourceCard({ item, opened, onOpen }: {
   };
 
   const meeting = item.kind === 'meeting';
-  const readable = item.content.status === 'succeeded' && Boolean(item.content.source_text);
+  const readable = item.kind === 'email' && item.content.status === 'succeeded' && Boolean(item.content.source_text);
   const cancelled = item.content.status === 'cancelled';
   const unavailable = item.calendar_available === false;
-  const title = item.content.subject || item.content.summary || (meeting ? t('Cuộc họp', 'Meeting') : t('Email không có tiêu đề', 'Untitled email'));
+  const title = item.kind === 'meeting' ? item.content.summary || t('Cuộc họp', 'Meeting') : item.content.subject || t('Email không có tiêu đề', 'Untitled email');
   return (
     <article className={`record inbox-record ${meeting ? 'inbox-meeting' : 'inbox-email'}`}>
       <div className="inbox-record-heading">
@@ -205,7 +63,7 @@ function SourceCard({ item, opened, onOpen }: {
         </div>
         {meeting && <span className="badge">{cancelled ? t('Đã hủy', 'Cancelled') : unavailable ? t('Không còn trong lịch', 'No longer in calendar') : item.content.status === 'tentative' ? t('Chưa xác nhận', 'Tentative') : t('Trong lịch', 'In calendar')}</span>}
       </div>
-      {meeting ? (
+      {item.kind === 'meeting' ? (
         <dl className="inbox-meeting-facts">
           <div><dt>{t('Bắt đầu', 'Starts')}</dt><dd>{readableDate(item.content.start?.dateTime || item.content.start?.date, locale, t)}{!item.content.start?.dateTime && item.content.start?.date && <> · {t('Cả ngày', 'All day')}</>}</dd></div>
           <div><dt>{t('Kết thúc', 'Ends')}</dt><dd>{readableDate(meetingEndDate(item.content), locale, t)}</dd></div>
@@ -214,7 +72,7 @@ function SourceCard({ item, opened, onOpen }: {
       ) : (
         <>
           <p className="inbox-email-meta"><strong>{sourceHeader(item, 'From') || t('Chưa rõ người gửi', 'Unknown sender')}</strong><span>{readableDate(sourceHeader(item, 'Date') || item.created_at, locale, t)}</span></p>
-          {readable && <p className="inbox-snippet">{item.content.source_text.replace(/\s+/g, ' ').slice(0, 220)}</p>}
+          {readable && <p className="inbox-snippet">{item.content.source_text?.replace(/\s+/g, ' ').slice(0, 220)}</p>}
         </>
       )}
       {(meeting || readable) && (
@@ -223,7 +81,7 @@ function SourceCard({ item, opened, onOpen }: {
             {opened ? t('Thu gọn nội dung', 'Collapse content') : meeting ? t('Xem chi tiết cuộc họp', 'View meeting details') : t('Xem email gốc', 'Read original email')}
           </button>
           {opened && <div id={`source-${item.id}`} className="inbox-reader">
-            {meeting ? <MeetingSource event={item.content} /> : <>
+            {item.kind === 'meeting' ? <MeetingSource event={item.content} /> : <>
               <pre className="preserve">{item.content.source_text}</pre>
               {item.content.body_format === 'html' && <p className="muted">{t('Email HTML được hiển thị dưới dạng văn bản an toàn.', 'HTML email is displayed as safe plain text.')}</p>}
               <Attachments items={item.content.attachments ?? []} />
@@ -265,18 +123,20 @@ export function Inbox() {
     }, { replace });
   }
   const client = useQueryClient();
-  const query = useQuery({ queryKey: ['inputs'], queryFn: () => api<SourceInput[]>('/inputs'), refetchInterval: 5000 });
+  const query = useQuery({ queryKey: ['inputs'], queryFn: ({ signal }) => endpoints.inputs(signal), refetchInterval: 5000 });
   const sync = useMutation({
-    mutationFn: (provider: string) => post(`/sync/${provider}`),
+    mutationFn: (provider: 'email' | 'calendar') => endpoints.sync(provider),
     onSuccess: () => { void client.invalidateQueries({ queryKey: ['inputs'] }); },
   });
   const sources = (query.data ?? []).filter((item) => item.kind === (meeting ? 'meeting' : 'email'));
   const items = sources.filter((item) => {
-    if (!meeting && !showOwn && item.content.mailbox && senderAddress(sourceHeader(item, 'From')) === item.content.mailbox.trim().toLowerCase()) return false;
-    const content = item.content;
-    return [content.subject, content.summary, content.source_text, sourceHeader(item, 'From'), content.location, content.description, ...(content.attendees ?? []).flatMap((a) => [a.email, a.displayName])]
+    if (item.kind === 'email' && !showOwn && item.content.mailbox && senderAddress(sourceHeader(item, 'From')) === item.content.mailbox.trim().toLowerCase()) return false;
+    const searchable = item.kind === 'email'
+      ? [item.content.subject, item.content.source_text, sourceHeader(item, 'From')]
+      : [item.content.summary, item.content.location, item.content.description, ...(item.content.attendees ?? []).flatMap((a) => [a.email, a.displayName])];
+    return searchable
       .filter(Boolean).join(' ').toLocaleLowerCase(locale).includes(search.trim().toLocaleLowerCase(locale));
-  }).sort((a, b) => meeting
+  }).sort((a, b) => a.kind === 'meeting' && b.kind === 'meeting'
     ? (Date.parse(a.content.start?.dateTime || a.content.start?.date || a.created_at) || 0) - (Date.parse(b.content.start?.dateTime || b.content.start?.date || b.created_at) || 0)
     : (Date.parse(sourceHeader(b, 'Date') || b.created_at) || 0) - (Date.parse(sourceHeader(a, 'Date') || a.created_at) || 0));
   const pages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));

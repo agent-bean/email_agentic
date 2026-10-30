@@ -62,6 +62,7 @@ async def prepare_publication(c, db):
         run, Draft(markdown="Briefing", email_subject="Reply", email_body="Approved reply."), {}
     )
     draft_id = await c.drafts.request(owner, rid, 1)
+    await c.drafts.package(owner, draft_id)
     await c.drafts.complete(draft_id, "succeeded", "draft-1", "thread-1")
     report = await c.reports.latest(owner, rid)
     await c.reports.edit(
@@ -142,3 +143,36 @@ async def test_approved_send_binds_previous_identical_version_and_never_reposts(
                 "SELECT id FROM publication_actions WHERE approval_id=%s AND kind='kb'",
                 (action["approval_id"],),
             )
+
+
+async def test_completion_guards_preserve_late_receipts_after_report_supersede(db):
+    from email_agentic.bootstrap import build_container
+    from email_agentic.domains.reports.service import ReportEdit
+    from email_agentic.platform.config import Settings
+    from email_agentic.platform.errors import Conflict
+
+    async with build_container(Settings(APP_ENV="test", DATABASE_URL=db.pool.conninfo, _env_file=None)) as c:
+        owner, rid, draft_id, action = await prepare_publication(c, db)
+        with pytest.raises(Conflict):
+            await c.publication.complete(action["id"], "succeeded", "premature")
+        with pytest.raises(Conflict):
+            await c.drafts.complete(draft_id, "failed", error="late_error")
+        with pytest.raises(Conflict):
+            await c.publication.complete(action["id"], "pending")
+        with pytest.raises(Conflict):
+            await c.drafts.complete(draft_id, "pending")
+        await c.publication.package(owner, action["id"])
+        report = await c.reports.latest(owner, rid)
+        await c.reports.edit(owner, rid, ReportEdit(
+            **{k: report[k] for k in ("version", "markdown", "email_subject", "email_body", "recipients")},
+        ))
+        await c.publication.complete(action["id"], "unknown", error="response_lost")
+        with pytest.raises(Conflict):
+            await c.publication.complete(action["id"], "failed", error="unsafe_retry")
+        await c.publication.complete(action["id"], "succeeded", "late-receipt")
+        await c.publication.complete(action["id"], "succeeded", "late-receipt")
+        with pytest.raises(Conflict):
+            await c.publication.complete(action["id"], "succeeded", "replacement-receipt")
+        saved = await db.one("SELECT status,provider_id FROM publication_actions WHERE id=%s", (action["id"],))
+        assert saved == {"status": "succeeded", "provider_id": "late-receipt"}
+        assert (await db.one("SELECT status FROM gmail_drafts WHERE id=%s", (draft_id,)))["status"] == "sent"
