@@ -18,6 +18,8 @@ The interface defaults to Vietnamese. The sidebar language selector switches all
 
 Incoming email and meetings have separate navigation and filters. Open a source to read its content before creating research. Email sending history distinguishes requests from confirmed delivery; checking Gmail is an explicit read-only action, and a search miss does not establish that delivery failed. The knowledge library offers search, status filters, pagination, and one report reader at a time. Search covers the newest 100 records returned by the API; it is not a complete archive search.
 
+The report editor retains unsaved changes when another tab saves a newer version. A conflict blocks overwriting that version and offers explicit reload after copying any changes to keep. Leaving the research page, including browser Back, requires discarding unsaved changes explicitly. If source retention makes the report read-only while editing, the unsaved draft remains available to copy in the current page but cannot be saved. Drafts are held in page memory, not browser storage; discarding them or closing the page loses them. Active runs/publications refresh frequently; completed records refresh less often.
+
 ## Review and publication decisions
 
 - Preserve the customer's original email separately from research instructions. Do not reconstruct it from old context. Calendar and attachment inputs retain their own provenance.
@@ -41,7 +43,7 @@ New automation needs a cutoff to avoid processing historical mail in bulk. [Sett
 | Business rules and persistence | [Domains](../apps/backend/src/email_agentic/domains/), [migrations](../apps/backend/migrations/) |
 | Providers and authorized tools | [Integrations](../apps/backend/src/email_agentic/integrations/), [harness](../apps/backend/src/email_agentic/tools/harness.py) |
 
-For HTTP contract changes, use `api:generate` in the web manifest to regenerate [web types](../apps/web/src/lib/api-schema.ts) from OpenAPI. Do not edit generated types by hand. Separate web and backend releases require compatible API contracts.
+For HTTP contract changes, run `make api-generate` (or `api:generate` in the web manifest) to regenerate [web types](../apps/web/src/lib/api-schema.ts) from OpenAPI. The [generator](../scripts/check-api-contract.py) uses declared settings defaults without loading credentials, starting a server, or connecting to a database. Run `make api-check` to detect drift. Do not edit generated types by hand. Separate web and backend releases require compatible API contracts.
 
 ## Interpreting limitations
 

@@ -29,3 +29,32 @@ describe('API transport', () => {
     }
   });
 });
+
+describe('generated endpoint contracts', () => {
+  it('encodes path values and preserves cancellation signals', async () => {
+    const { endpoints } = await import('../../../src/lib/api');
+    const fetch = vi.fn().mockResolvedValue(new Response('{}'));
+    vi.stubGlobal('fetch', fetch);
+    const controller = new AbortController();
+    await endpoints.input('source/with space', controller.signal);
+    expect(fetch).toHaveBeenCalledWith('/api/v1/inputs/source%2Fwith%20space', expect.objectContaining({ signal: controller.signal, method: 'GET' }));
+  });
+
+  it('binds research submission to its typed body and stable idempotency key', async () => {
+    const { endpoints } = await import('../../../src/lib/api');
+    const fetch = vi.fn().mockResolvedValue(new Response('{"id":"run-id"}'));
+    vi.stubGlobal('fetch', fetch);
+    await endpoints.createRun({ company_name: 'Example', domain: 'example.org', context: '' }, 'stable-key');
+    expect(fetch).toHaveBeenCalledWith('/api/v1/runs', expect.objectContaining({
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': 'stable-key' },
+    }));
+    if (false) {
+      // @ts-expect-error The generated request requires a domain.
+      void endpoints.createRun({ company_name: 'Example' }, 'stable-key');
+      // @ts-expect-error Approval is boolean, not an arbitrary payload.
+      void endpoints.decide('approval-id', 'yes');
+      // @ts-expect-error Report editing requires a versioned payload.
+      void endpoints.editReport('run-id', { email_subject: 'Unversioned' });
+    }
+  });
+});

@@ -2,6 +2,9 @@ import uuid
 from datetime import timedelta
 from psycopg.types.json import Jsonb
 from email_agentic.platform.telemetry import current_trace_parent
+from email_agentic.domains.inbox.job_state import fail_intake
+from email_agentic.domains.research.execution import fail_processing, settle_processing
+from email_agentic.runtime.execution import settle_intake
 
 
 async def enqueue(connection, owner, kind, entity_id, key):
@@ -36,29 +39,44 @@ class Jobs:
         return row is not None
 
     async def finish(self, job, status="done", error=None, retry=False):
-        await self.db.execute(
-            """UPDATE jobs SET status=%s,error_code=%s,lease_until=NULL,
-            available_at=now()+%s WHERE id=%s AND claim_token=%s AND lease_until>now()""",
-            (
-                "pending" if retry else status,
-                error,
-                timedelta(seconds=2 ** job["attempt"]),
-                job["id"],
-                job["claim_token"],
-            ),
-        )
+        async with self.db.transaction() as connection:
+            current = await (await connection.execute(
+                """SELECT * FROM jobs WHERE id=%s AND claim_token=%s
+                AND status='running' AND lease_until>now() FOR UPDATE""",
+                (job["id"], job["claim_token"]),
+            )).fetchone()
+            if current is None:
+                return False
+            await settle_processing(connection, current)
+            await settle_intake(connection, current)
+            if status == "failed":
+                await fail_intake(connection, current, error, retry)
+                if not retry:
+                    await fail_processing(connection, current, error)
+            await connection.execute(
+                """UPDATE jobs SET status=%s,error_code=%s,lease_until=NULL,
+                available_at=now()+%s WHERE id=%s""",
+                ("pending" if retry else status, error,
+                 timedelta(seconds=2 ** current["attempt"]), current["id"]),
+            )
+            return True
 
     async def recover(self):
+        from email_agentic.domains.inbox.drafts import GmailDrafts
+        from email_agentic.domains.publication.service import Publication
+
         async with self.db.transaction() as connection:
-            await connection.execute("""UPDATE gmail_drafts SET status='unknown',error_code='worker_interrupted'
-                WHERE status='running' AND id IN (SELECT entity_id FROM jobs WHERE kind='gmail_draft'
-                AND ((status='running' AND lease_until<now()) OR status IN ('failed','done')))""")
-            await connection.execute("""UPDATE publication_actions SET status='unknown',error_code='worker_interrupted'
-                WHERE kind='email' AND status='running' AND id IN
-                (SELECT entity_id FROM jobs WHERE kind='publish' AND ((status='running' AND lease_until<now()) OR status IN ('failed','done')))""")
-            await connection.execute("""UPDATE publication_actions p SET status=CASE WHEN EXISTS(SELECT 1 FROM jobs j WHERE j.entity_id=p.id AND j.kind='publish' AND j.status IN ('failed','done')) THEN 'failed' ELSE 'pending' END
-                WHERE kind='kb' AND status='running' AND id IN
-                (SELECT entity_id FROM jobs WHERE kind='publish' AND ((status='running' AND lease_until<now()) OR status IN ('failed','done')))""")
+            expired = await (await connection.execute(
+                "SELECT * FROM jobs WHERE status='running' AND lease_until<now() ORDER BY id FOR UPDATE",
+            )).fetchall()
+            await GmailDrafts.recover(connection)
+            await Publication.recover(connection)
+            for job in expired:
+                await settle_processing(connection, job, recovered=True)
+                await settle_intake(connection, job, recovered=True)
+                if job["attempt"] >= 3:
+                    await fail_processing(connection, job, "lease_expired")
+                    await fail_intake(connection, job, "lease_expired")
             await connection.execute("""UPDATE jobs SET status=CASE WHEN attempt<3 THEN 'pending' ELSE 'failed' END,
                 claim_token=NULL,lease_until=NULL,error_code='lease_expired'
                 WHERE status='running' AND lease_until<now()""")

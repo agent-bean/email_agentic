@@ -137,6 +137,7 @@ async def test_draft_is_blocked_if_report_changed_and_unknown_retry_does_not_res
         assert await c.drafts.package(owner, pending) is None
         assert (await db.one('SELECT status FROM gmail_drafts WHERE id=%s', (pending,)))['status'] == 'blocked'
         current = await c.drafts.request(owner, run_id, 2)
+        await c.drafts.package(owner, current)
         await c.drafts.complete(current, 'unknown')
         await db.execute("UPDATE jobs SET status='done',attempt=2 WHERE entity_id=%s AND kind='gmail_draft'", (current,))
         assert await c.drafts.request(owner, run_id, 2) == current

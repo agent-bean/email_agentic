@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 import logging
 import re
@@ -9,6 +10,7 @@ from pydantic import ValidationError
 from email_agentic.integrations.http import json_request
 from email_agentic.platform.errors import ProviderFailure
 from email_agentic.platform.telemetry import tracer
+from email_agentic.runtime.budget import operation_scope, remaining_budget, reserve_attempt
 
 
 class LLM:
@@ -33,8 +35,20 @@ class LLM:
         suffix = "\nReturn one JSON object with exactly these fields and constraints:\n" + json.dumps(definition)
         messages = [{"role": "system", "content": system + suffix}, {"role": "user", "content": payload}]
         loop = asyncio.get_running_loop()
-        deadline = loop.time() + self.settings.research_timeout_seconds
+        deadline = loop.time() + remaining_budget(self.settings.research_timeout_seconds)
+        operation = hashlib.sha256(
+            f"llm:{schema.__module__}.{schema.__qualname__}:{run_id}:{input_id}:{operation_scope.get()}".encode()
+        ).hexdigest()
         for attempt in range(2):
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                raise ProviderFailure("llm", transient=True, category="network_or_timeout")
+            try:
+                async with asyncio.timeout(remaining):
+                    if not await reserve_attempt(operation):
+                        raise ProviderFailure("llm", category="retry_exhausted")
+            except TimeoutError:
+                raise ProviderFailure("llm", transient=True, category="network_or_timeout") from None
             remaining = deadline - loop.time()
             if remaining <= 0:
                 raise ProviderFailure("llm", transient=True, category="network_or_timeout")

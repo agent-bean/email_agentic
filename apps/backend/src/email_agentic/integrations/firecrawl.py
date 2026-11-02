@@ -47,7 +47,7 @@ class Firecrawl:
             )
 
         try:
-            response = await bounded_retry(request, timeout_seconds, provider="firecrawl")
+            response = await bounded_retry(request, timeout_seconds, provider="firecrawl", operation_key=url)
         except ProviderFailure as exc:
             if exc.category == "http_429":
                 self.cooldown_until = asyncio.get_running_loop().time() + max(5, exc.retry_after or 0)

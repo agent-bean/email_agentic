@@ -39,6 +39,7 @@ class Reports:
         quality,
         formats=(),
         previous=None,
+        rendered=None,
     ):
         report = {"id": uuid.uuid4(), "owner": run["owner"], "run_id": run["id"], "markdown": markdown}
         await connection.execute(
@@ -67,7 +68,7 @@ class Reports:
         for format in dict.fromkeys(formats):
             artifacts.append(
                 reusable.get(format)
-                or await self.files.create(connection, {**report, "version": version}, format)
+                or await self.files.create(connection, {**report, "version": version}, format, rendered[format])
             )
         if artifacts:
             await connection.execute(
@@ -107,28 +108,41 @@ class Reports:
                 quality,
             )
 
+    async def editable(self, connection, owner, run_id, request, lock=False):
+        run = await (
+            await connection.execute(
+                "SELECT * FROM research_runs WHERE id=%s AND owner=%s" + (" FOR UPDATE" if lock else ""),
+                (run_id, owner),
+            )
+        ).fetchone()
+        if not run or run.get("history_purged_at"):
+            raise NotFound()
+        if run.get("raw_purged_at"):
+            raise Conflict("Source data expired; this report is read-only")
+        old = await (
+            await connection.execute(
+                "SELECT * FROM reports WHERE run_id=%s ORDER BY version DESC LIMIT 1", (run_id,)
+            )
+        ).fetchone()
+        if not old or old["version"] != request.version:
+            raise Conflict("Report version changed")
+        if run.get("source_message") and request.email_subject != old["email_subject"]:
+            raise Conflict("Keep the reply subject unchanged to preserve the Gmail thread")
+        if request.send_email and not any(request.recipients.model_dump().values()):
+            raise Conflict("Choose at least one recipient before enabling send")
+        return run, old
+
     async def edit(self, owner, run_id, request):
+        # Rendering may wait on CPU capacity. Keep all connections and run locks free while it does.
         async with self.db.transaction() as connection:
-            run = await (
-                await connection.execute(
-                    "SELECT * FROM research_runs WHERE id=%s AND owner=%s FOR UPDATE", (run_id, owner)
-                )
-            ).fetchone()
-            if not run or run.get("history_purged_at"):
-                raise NotFound()
-            if run.get("raw_purged_at"):
-                raise Conflict("Source data expired; this report is read-only")
-            old = await (
-                await connection.execute(
-                    "SELECT * FROM reports WHERE run_id=%s ORDER BY version DESC LIMIT 1", (run_id,)
-                )
-            ).fetchone()
-            if not old or old["version"] != request.version:
-                raise Conflict("Report version changed")
-            if run.get("source_message") and request.email_subject != old["email_subject"]:
-                raise Conflict("Keep the reply subject unchanged to preserve the Gmail thread")
-            if request.send_email and not any(request.recipients.model_dump().values()):
-                raise Conflict("Choose at least one recipient before enabling send")
+            _, snapshot = await self.editable(connection, owner, run_id, request)
+        reusable = {item["format"] for item in snapshot["artifacts"]} if snapshot["markdown"] == request.markdown else set()
+        rendered = {
+            format: await self.files.render(request.markdown, request.version + 1, format)
+            for format in dict.fromkeys(request.attachment_formats) if format not in reusable
+        }
+        async with self.db.transaction() as connection:
+            run, old = await self.editable(connection, owner, run_id, request, lock=True)
             await connection.execute(
                 "UPDATE approvals SET status='superseded' WHERE report_id=%s AND status IN ('pending','approved')",
                 (old["id"],),
@@ -152,4 +166,5 @@ class Reports:
                 quality,
                 request.attachment_formats,
                 old,
+                rendered,
             )

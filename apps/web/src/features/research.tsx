@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { api, post, type Run, type ResearchInput } from "../lib/api";
+import { endpoints, type ResearchInput } from "../lib/api";
 import { ErrorMessage, Status } from "../components/status";
-import { Attachments, MeetingSource, type SourceInput } from "./inbox";
+import { Attachments, MeetingSource } from "../components/source-content";
 import { Icon } from "../components/icon";
 import { useI18n } from "../lib/i18n";
 
@@ -50,8 +50,8 @@ export function Overview() {
     );
   const query = useQuery({
     queryKey: ["runs"],
-    queryFn: () => api<Run[]>("/runs"),
-    refetchInterval: 5000,
+    queryFn: ({ signal }) => endpoints.runs(signal),
+    refetchInterval: (query) => query.state.data?.some((run) => ["queued", "running"].includes(run.status)) ? 5000 : 30000,
   });
   const runs = query.data ?? [];
   const visibleRuns = [...runs]
@@ -246,7 +246,7 @@ export function NewResearch() {
   const sourceId = params.get("input");
   const source = useQuery({
     queryKey: ["input", sourceId],
-    queryFn: () => api<SourceInput>(`/inputs/${sourceId}`),
+    queryFn: ({ signal }) => endpoints.input(sourceId!, signal),
     enabled: Boolean(sourceId),
   });
   const submission = useRef({ body: "", key: "" });
@@ -268,7 +268,7 @@ export function NewResearch() {
       const body = JSON.stringify(payload);
       if (submission.current.body !== body)
         submission.current = { body, key: crypto.randomUUID() };
-      return post<{ id: string }>("/runs", payload, submission.current.key);
+      return endpoints.createRun(payload, submission.current.key);
     },
     onSuccess: (value) => navigate(`/research/${value.id}`),
   });
@@ -350,7 +350,7 @@ export function NewResearch() {
                       </pre>
                     )}
                     <Attachments
-                      items={source.data.content.attachments ?? []}
+                      items={source.data.kind === "email" ? source.data.content.attachments ?? [] : []}
                     />
                     <p className="muted">
                       {t('Ứng dụng giữ nguyên nguồn đã chọn. Nhập đúng doanh nghiệp cần nghiên cứu ở phía trên.', 'The selected source is preserved. Enter the company to research above.')}

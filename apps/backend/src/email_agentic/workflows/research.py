@@ -21,6 +21,8 @@ from email_agentic.agents.report_generation import ReportGenerationAgent
 from email_agentic.agents.web_research import WebResearchAgent
 from email_agentic.tools.harness import ToolContext
 from email_agentic.platform.errors import Conflict
+from email_agentic.models.agents import BranchResult
+from email_agentic.runtime.budget import provider_operation
 from email_agentic.platform.telemetry import tracer
 
 
@@ -157,18 +159,16 @@ def make_graph(container, checkpointer):
                 "SELECT result FROM branch_results WHERE run_id=%s AND branch=%s", (run["id"], name)
             )
             if existing and existing["result"]["status"] == "succeeded":
-                result = existing["result"]
+                result = BranchResult.model_validate({**existing["result"], "role": name}).model_dump(exclude_unset=True)
             else:
                 context = ToolContext(run["owner"], name, frozenset({scope}), str(run["id"]))
                 try:
                     data = await agent.run(run, context)
-                    result = {
-                        "role": name,
-                        "status": "succeeded",
-                        "data": json.loads(json.dumps(data, default=str)),
-                    }
+                    result = BranchResult(
+                        role=name, status="succeeded", data=json.loads(json.dumps(data, default=str)),
+                    ).model_dump(exclude_unset=True)
                 except Exception as exc:
-                    result = {"role": name, "status": "failed", "error_code": type(exc).__name__}
+                    result = BranchResult(role=name, status="failed", error_code=type(exc).__name__).model_dump(exclude_unset=True)
                 await c.jobs.save_branch(run["id"], name, result)
             # A previous worker may have stopped between saving the result and its evidence.
             # Replaying cached evidence is idempotent and does not repeat provider calls.
@@ -218,7 +218,8 @@ def make_graph(container, checkpointer):
         correction_attempted = bool(cited_urls(draft.markdown + "\n" + draft.email_body) - known)
         if correction_attempted:
             # One bounded correction stays inside the run deadline; never publish unsupported links.
-            draft = await agent.run(run, evidence, branches, previous_draft=draft)
+            with provider_operation("citation_correction"):
+                draft = await agent.run(run, evidence, branches, previous_draft=draft)
         cited = cited_urls(draft.markdown)
         unknown = (cited | cited_urls(draft.email_body)) - known
         if unknown:

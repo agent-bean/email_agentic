@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import jwt
 from fastapi import FastAPI, Request
@@ -15,6 +16,7 @@ from email_agentic.platform.telemetry import configure
 
 def create_app(settings=None):
     settings = settings or get_settings()
+    required_migrations = sorted(path.name for path in (Path(__file__).resolve().parents[2] / "migrations").glob("*.sql"))
 
     @asynccontextmanager
     async def lifespan(app):
@@ -54,7 +56,10 @@ def create_app(settings=None):
     @app.get("/health/ready", include_in_schema=False)
     async def ready(request: Request):
         row = await request.app.state.container.db.one(
-            "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE name='007-report-files.sql') AND to_regclass('checkpoints') IS NOT NULL AS ready"
+            """SELECT NOT EXISTS(SELECT name FROM unnest(%s::text[]) AS required(name)
+            WHERE NOT EXISTS(SELECT 1 FROM schema_migrations applied WHERE applied.name=required.name))
+            AND to_regclass('checkpoints') IS NOT NULL AS ready""",
+            (required_migrations,),
         )
         if not row["ready"]:
             return JSONResponse({"status": "migration_required"}, status_code=503)

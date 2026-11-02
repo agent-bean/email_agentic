@@ -2,10 +2,11 @@
 import json
 
 from email_agentic.models.agents import EmailIntakeDecision as EmailIntakeDecision
+from email_agentic.ports.research import StructuredGenerator
 
 
 class EmailIntakeAgent:
-    def __init__(self, llm):
+    def __init__(self, llm: StructuredGenerator):
         self.llm = llm
 
     async def run(self, input_id, source):

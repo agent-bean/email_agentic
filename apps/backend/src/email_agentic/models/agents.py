@@ -18,6 +18,7 @@ class BranchResult(StrictModel):
     facts: list[dict] = Field(default_factory=list)
     missing: list[str] = Field(default_factory=list)
     error_code: str | None = None
+    data: dict | list | None = None
 
 
 class EmailIntakeDecision(StrictModel):

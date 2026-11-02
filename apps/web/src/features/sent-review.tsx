@@ -1,16 +1,15 @@
 import { useI18n, type Translate } from '../lib/i18n';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { api } from '../lib/api';
+import { endpoints } from '../lib/api';
 import type { components } from '../lib/api-schema';
 import { ErrorMessage } from '../components/status';
 import './sent-review.css';
 
 type Row = components['schemas']['SentReviewRow'];
-type Verification = components['schemas']['SentVerification'];
 
 const getStatusLabels = (t: Translate): Record<string, string> => ({
-  queued: t("Chờ gửi", "Waiting to send"), running: t("Đang xử lý", "Processing"), succeeded: t("Đã ghi nhận gửi", "Send recorded"),
+  pending: t("Chờ gửi", "Waiting to send"), running: t("Đang xử lý", "Processing"), succeeded: t("Đã ghi nhận gửi", "Send recorded"),
   unknown: t("Cần kiểm tra", "Needs checking"), failed: t("Gửi gặp lỗi", "Send failed"), blocked: t("Đã chặn gửi", "Send blocked"),
 });
 const getVerificationLabels = (t: Translate): Record<string, string> => ({
@@ -34,7 +33,7 @@ function Receipt({ row }: { row: Row }) {
   // A mutation runs only on a click, never on focus, reconnect or mounting.
   const check = useMutation({
     mutationFn: async () => ({
-      result: await api<Verification>(`/sent-review/${row.id}`),
+      result: await endpoints.verifySent(row.id),
       checkedAt: new Date().toISOString(),
     }),
     retry: false,
@@ -47,8 +46,8 @@ function Receipt({ row }: { row: Row }) {
         <span className={`status status-${row.status}`}>{statusLabels[row.status] ?? t("Trạng thái khác", "Other status")}</span>
       </div>
       <p className="sent-recipients">
-        {Object.entries(row.recipients).filter(([, values]) => values.length).map(([kind, values]) => (
-          <span key={kind}><strong>{({ to: t("Đến", "To"), cc: 'Cc', bcc: 'Bcc' } as Record<string, string>)[kind] ?? kind}: </strong>{values.join(', ')}</span>
+        {Object.entries(row.recipients).filter(([, values]) => values?.length).map(([kind, values]) => (
+          <span key={kind}><strong>{({ to: t("Đến", "To"), cc: 'Cc', bcc: 'Bcc' } as Record<string, string>)[kind] ?? kind}: </strong>{values?.join(', ')}</span>
         ))}
       </p>
       <p className="muted meta">{t("Yêu cầu lúc", "Requested at") + ' '}<time dateTime={row.created_at}>{new Date(row.created_at).toLocaleString(locale, { timeZone: 'Asia/Bangkok' })}</time>{' ' + t("(UTC+7) · Phiên bản", "(UTC+7) · Version") + ' '}{row.version}</p>
@@ -91,13 +90,13 @@ export function SentReview() {
   const search = params.get('q') ?? '';
   const selected = params.get('status') ?? 'all';
   const status = filters.some(([value]) => value === selected) ? selected : 'all';
-  const query = useQuery({ queryKey: ['sent-review'], queryFn: () => api<Row[]>('/sent-review') });
+  const query = useQuery({ queryKey: ['sent-review'], queryFn: ({ signal }) => endpoints.sentReview(signal), refetchInterval: (query) => query.state.data?.some((row) => ['pending', 'running', 'unknown'].includes(row.status)) ? 5000 : 30000 });
   const rows = [...(query.data ?? [])].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
   const matches = rows.filter((row) => {
     const searchable = [row.email_subject, ...Object.values(row.recipients).flat()].join(' ').toLocaleLowerCase('vi');
     const statusMatches = status === 'all' || row.status === status ||
-      (status === 'active' && ['queued', 'running'].includes(row.status)) ||
-      (status === 'attention' && !['queued', 'running', 'succeeded'].includes(row.status));
+      (status === 'active' && ['pending', 'running'].includes(row.status)) ||
+      (status === 'attention' && !['pending', 'running', 'succeeded'].includes(row.status));
     return statusMatches && searchable.includes(search.trim().toLocaleLowerCase('vi'));
   });
   const pages = Math.max(1, Math.ceil(matches.length / pageSize));

@@ -2,6 +2,20 @@ from email.utils import parseaddr
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+
+class AttachmentDescriptor(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    id: str
+    filename: str
+    mime_type: str
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    format: Literal["pdf", "docx", "md"]
+
+
+class AttachmentContent(AttachmentDescriptor):
+    data: bytes
+
+
 class Recipients(BaseModel):
     model_config = ConfigDict(extra="forbid")
     to: list[str] = Field(default_factory=list, max_length=20)

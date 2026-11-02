@@ -17,9 +17,12 @@ from email_agentic.models.api import (
     IdentityConfirmation as IdentityConfirmation,
     SentReviewRow as SentReviewRow,
     SentVerification as SentVerification,
+    CompanyRow, KnowledgeRow, SystemStatus, CurrentUser, Queued, DecisionResult,
 )
 
-from email_agentic.models.reports import ReportEdit
+from email_agentic.models.reports import ReportEdit, AttachmentDescriptor
+from email_agentic.models.sources import SourceInput
+from email_agentic.api.queries import WorkspaceQueries
 from email_agentic.models.research import ResearchRequest
 from email_agentic.platform.auth import Actor, authenticate
 from email_agentic.runtime.jobs import enqueue
@@ -27,16 +30,14 @@ from email_agentic.runtime.jobs import enqueue
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(authenticate)])
 
 
-@router.get("/me")
+@router.get("/me", response_model=CurrentUser)
 async def me(actor: Actor = Depends(authenticate)):
     return {"email": actor.owner, "role": actor.role}
 
 
 @router.get("/runs", response_model=list[RunSummary])
 async def runs(request: Request, actor: Actor = Depends(authenticate)):
-    return await request.app.state.container.db.all(
-        "SELECT * FROM research_runs WHERE owner=%s ORDER BY created_at DESC LIMIT 100", (actor.owner,)
-    )
+    return await WorkspaceQueries(request.app.state.container.db).runs(actor.owner)
 
 
 @router.post("/runs", status_code=202, response_model=Created)
@@ -51,44 +52,10 @@ async def create_run(
 
 @router.get("/runs/{run_id}", response_model=RunDetail)
 async def run_detail(run_id: UUID, request: Request, actor: Actor = Depends(authenticate)):
-    c = request.app.state.container
-    run = await c.research.get(actor.owner, run_id)
-    reports = await c.db.all("SELECT * FROM reports WHERE run_id=%s ORDER BY version DESC LIMIT 1", (run_id,))
-    approvals = await c.db.all(
-        "SELECT * FROM approvals WHERE report_id IN(SELECT id FROM reports WHERE run_id=%s) ORDER BY created_at DESC",
-        (run_id,),
-    )
-    actions = await c.db.all(
-        "SELECT * FROM publication_actions WHERE approval_id IN(SELECT a.id FROM approvals a JOIN reports r ON r.id=a.report_id WHERE r.run_id=%s)",
-        (run_id,),
-    )
-    return {
-        "run": run,
-        "reports": reports,
-        "approvals": approvals,
-        "actions": actions,
-        "branches": await c.db.all("SELECT * FROM branch_results WHERE run_id=%s", (run_id,)),
-        "evidence": await c.db.all(
-            "SELECT id,url,title,published_at FROM evidence WHERE run_id=%s", (run_id,)
-        ),
-        "usage": await c.db.all(
-            "SELECT model,input_tokens,output_tokens,cost FROM model_usage WHERE run_id=%s", (run_id,)
-        ),
-        "gmail_drafts": await c.db.all(
-            """SELECT d.id,d.report_id,d.status,d.provider_id,d.thread_id,d.error_code,
-            (r.email_subject=latest.email_subject AND r.email_body=latest.email_body
-             AND r.recipients=latest.recipients AND r.artifacts=latest.artifacts) AS matches_current
-            FROM gmail_drafts d JOIN reports r ON r.id=d.report_id
-            JOIN reports latest ON latest.run_id=d.run_id
-             AND latest.version=(SELECT max(version) FROM reports WHERE run_id=d.run_id)
-            WHERE d.run_id=%s ORDER BY d.created_at DESC""",
-            (run_id,),
-        ),
-        "gmail_drafts_available": c.google.drafts_available,
-    }
+    return await WorkspaceQueries(request.app.state.container.db).run_detail(actor.owner, run_id, request.app.state.container.google.drafts_available)
 
 
-@router.post("/runs/{run_id}/identity", status_code=202)
+@router.post("/runs/{run_id}/identity", status_code=202, response_model=Queued)
 async def identity(
     run_id: UUID, payload: IdentityConfirmation, request: Request, actor: Actor = Depends(authenticate)
 ):
@@ -105,7 +72,7 @@ async def edit_report(
     return {"id": await request.app.state.container.reports.edit(actor.owner, run_id, payload)}
 
 
-@router.post("/approvals/{approval_id}/decision")
+@router.post("/approvals/{approval_id}/decision", response_model=DecisionResult)
 async def decide(
     approval_id: UUID, payload: Decision, request: Request, actor: Actor = Depends(authenticate)
 ):
@@ -113,33 +80,14 @@ async def decide(
     return {"status": "approved" if payload.approve else "rejected"}
 
 
-@router.get("/inputs")
+@router.get("/inputs", response_model=list[SourceInput])
 async def inputs(request: Request, actor: Actor = Depends(authenticate)):
-    rows = await request.app.state.container.db.all(
-        """SELECT i.*,COALESCE(t.status,ct.status) AS intake_status,COALESCE(t.run_id,r.id,ct.run_id) AS research_run_id,ct.revision AS meeting_revision FROM inputs i
-        LEFT JOIN email_triage t ON t.input_id=i.id AND t.owner=i.owner
-        LEFT JOIN research_runs r ON r.source_input_id=i.id AND r.owner=i.owner
-        LEFT JOIN LATERAL (SELECT status,run_id,revision FROM calendar_triage WHERE input_id=i.id AND owner=i.owner
-         ORDER BY created_at DESC LIMIT 1) ct ON true
-        WHERE i.owner=%s ORDER BY COALESCE((i.content->>'received_at')::timestamptz,i.created_at) DESC LIMIT 100""", (actor.owner,)
-    )
-
-    from email_agentic.integrations.calendar_event import revision
-    for row in rows:
-        if row['kind'] == 'meeting' and (row['calendar_available'] is False or row['meeting_revision'] != revision(row['content'])):
-            row['research_run_id'], row['intake_status'] = None, 'superseded'
-    return rows
+    return await WorkspaceQueries(request.app.state.container.db).inputs(actor.owner)
 
 
-@router.get("/inputs/{input_id}")
+@router.get("/inputs/{input_id}", response_model=SourceInput)
 async def input_detail(input_id: UUID, request: Request, actor: Actor = Depends(authenticate)):
-    from email_agentic.platform.errors import NotFound
-
-    row = await request.app.state.container.db.one("SELECT * FROM inputs WHERE id=%s AND owner=%s",
-                                                (input_id, actor.owner))
-    if not row:
-        raise NotFound()
-    return row
+    return await WorkspaceQueries(request.app.state.container.db).input_detail(actor.owner, input_id)
 
 
 @router.post("/runs/{run_id}/gmail-draft", status_code=202, response_model=Created)
@@ -151,21 +99,17 @@ async def gmail_draft(run_id: UUID, payload: IdentityDecision, request: Request,
     return {"id": await request.app.state.container.drafts.request(actor.owner, run_id, payload.version)}
 
 
-@router.get("/knowledge")
+@router.get("/knowledge", response_model=list[KnowledgeRow])
 async def knowledge(request: Request, actor: Actor = Depends(authenticate)):
-    return await request.app.state.container.db.all(
-        "SELECT * FROM knowledge WHERE owner=%s ORDER BY created_at DESC LIMIT 100", (actor.owner,)
-    )
+    return await WorkspaceQueries(request.app.state.container.db).knowledge(actor.owner)
 
 
-@router.get("/companies")
+@router.get("/companies", response_model=list[CompanyRow])
 async def companies(request: Request, actor: Actor = Depends(authenticate)):
-    return await request.app.state.container.db.all(
-        "SELECT * FROM companies WHERE owner=%s ORDER BY created_at DESC LIMIT 100", (actor.owner,)
-    )
+    return await WorkspaceQueries(request.app.state.container.db).companies(actor.owner)
 
 
-@router.get("/system")
+@router.get("/system", response_model=SystemStatus)
 async def system(request: Request):
     c = request.app.state.container
     return {
@@ -185,7 +129,7 @@ async def system(request: Request):
     }
 
 
-@router.post("/sync/{provider}", status_code=202)
+@router.post("/sync/{provider}", status_code=202, response_model=Queued)
 async def sync(
     provider: str,
     request: Request,
@@ -202,7 +146,7 @@ async def sync(
     return {"status": "queued"}
 
 
-@router.post("/runs/{run_id}/reports/{report_id}/exports/{format}", status_code=201)
+@router.post("/runs/{run_id}/reports/{report_id}/exports/{format}", status_code=201, response_model=AttachmentDescriptor)
 async def export_report(run_id: UUID, report_id: UUID, format: str, request: Request, actor: Actor = Depends(authenticate)):
     return await request.app.state.container.reports.files.export(actor.owner, run_id, report_id, format)
 
@@ -218,11 +162,7 @@ async def download_file(file_id: UUID, request: Request, inline: bool = False, a
 @router.get("/sent-review", response_model=list[SentReviewRow])
 async def sent_review(request: Request, response: Response, actor: Actor = Depends(authenticate)):
     response.headers['Cache-Control'] = 'private, no-store'
-    return await request.app.state.container.db.all(
-        """SELECT p.id,r.run_id,r.version,r.email_subject,r.email_body,r.recipients,p.status,p.provider_id,
-        p.error_code,a.created_at FROM publication_actions p JOIN approvals a ON a.id=p.approval_id
-        JOIN reports r ON r.id=a.report_id WHERE r.owner=%s AND p.kind='email'
-        ORDER BY a.created_at DESC LIMIT 100""", (actor.owner,))
+    return await WorkspaceQueries(request.app.state.container.db).sent_review(actor.owner)
 
 
 @router.get("/sent-review/{action_id}", response_model=SentVerification)

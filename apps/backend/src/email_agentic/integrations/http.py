@@ -1,11 +1,13 @@
 import asyncio
 import logging
+import hashlib
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 
 import httpx
 
 from email_agentic.platform.errors import ProviderFailure
+from email_agentic.runtime.budget import remaining_budget, reserve_attempt
 
 
 def retry_delay(value):
@@ -18,12 +20,21 @@ def retry_delay(value):
             return None
 
 
-async def bounded_retry(operation, budget, *, provider):
-    deadline = asyncio.get_running_loop().time() + budget
+async def bounded_retry(operation, budget, *, provider, operation_key=None):
+    deadline = asyncio.get_running_loop().time() + remaining_budget(budget)
     for attempt in range(3):
         remaining = deadline - asyncio.get_running_loop().time()
+        if remaining <= 0:
+            raise ProviderFailure(provider, transient=True, category="network_or_timeout")
         try:
             async with asyncio.timeout(max(0, remaining)):
+                if operation_key is not None:
+                    key = hashlib.sha256(f"{provider}:{operation_key}".encode()).hexdigest()
+                    if not await reserve_attempt(key):
+                        raise ProviderFailure(provider, category="retry_exhausted")
+                remaining = deadline - asyncio.get_running_loop().time()
+                if remaining <= 0:
+                    raise TimeoutError
                 return await operation(remaining)
         except TimeoutError:
             raise ProviderFailure(provider, transient=True, category="network_or_timeout") from None
@@ -40,6 +51,7 @@ async def bounded_retry(operation, budget, *, provider):
 
 
 async def json_request(client, provider, method, url, deadline_seconds=45, **kwargs):
+    deadline_seconds = remaining_budget(deadline_seconds)
     try:
         async with asyncio.timeout(deadline_seconds):
             response = await client.request(method, url, **kwargs)

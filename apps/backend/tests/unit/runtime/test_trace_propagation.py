@@ -1,4 +1,5 @@
 import uuid
+from contextlib import nullcontext
 from types import SimpleNamespace
 
 import pytest
@@ -33,15 +34,16 @@ async def test_worker_restores_queue_context_before_creating_child_task(tracing,
 
     async def finish(job):
         finished.append(job["id"])
+        return True
 
-    worker = Worker(SimpleNamespace(jobs=SimpleNamespace(finish=finish)), None)
+    worker = Worker(SimpleNamespace(jobs=SimpleNamespace(finish=finish), db=SimpleNamespace(run_lock=lambda _: nullcontext())), None)
 
     async def handle(job):
         with tracer.start_as_current_span("tool.read"):
             pass
 
     worker.handle = handle
-    job = {"id": uuid.uuid4(), "kind": kind, "attempt": 1, "trace_parent": parent}
+    job = {"id": uuid.uuid4(), "entity_id": uuid.uuid4(), "kind": kind, "attempt": 1, "trace_parent": parent}
     await worker.process(job)
     spans = {span.name: span for span in exporter.get_finished_spans()}
     worker_span = spans["job." + kind]

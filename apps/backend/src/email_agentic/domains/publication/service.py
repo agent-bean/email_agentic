@@ -7,6 +7,15 @@ class Publication:
     def __init__(self, db, knowledge):
         self.db, self.knowledge = db, knowledge
 
+    @staticmethod
+    async def recover(connection):
+        await connection.execute("""UPDATE publication_actions SET status='unknown',error_code='worker_interrupted'
+            WHERE kind='email' AND status='running' AND id IN
+            (SELECT entity_id FROM jobs WHERE kind='publish' AND ((status='running' AND lease_until<now()) OR status IN ('failed','done')))""")
+        await connection.execute("""UPDATE publication_actions p SET status=CASE WHEN EXISTS(SELECT 1 FROM jobs j WHERE j.entity_id=p.id AND j.kind='publish' AND j.status IN ('failed','done')) THEN 'failed' ELSE 'pending' END
+            WHERE kind='kb' AND status='running' AND id IN
+            (SELECT entity_id FROM jobs WHERE kind='publish' AND ((status='running' AND lease_until<now()) OR status IN ('failed','done')))""")
+
     async def authorized(self, owner, action_id, kind):
         row = await self.db.one(
             """SELECT p.id FROM publication_actions p
@@ -42,6 +51,8 @@ class Publication:
             ).fetchone()
             if action["status"] in {"succeeded", "unknown", "running", "blocked"}:
                 return None
+            if action["status"] not in {"pending", "failed"}:
+                raise Conflict("Invalid publication state")
             if approval["status"] != "approved":
                 raise Conflict("Approval is no longer valid")
             latest = await (
@@ -87,7 +98,20 @@ class Publication:
             return row
 
     async def complete(self, action_id, status, provider_id=None, error=None):
+        if status not in {"succeeded", "failed", "unknown"}:
+            raise Conflict("Invalid publication completion state")
         async with self.db.transaction() as connection:
+            action = await (await connection.execute(
+                "SELECT status,provider_id,error_code FROM publication_actions WHERE id=%s FOR UPDATE",
+                (action_id,),
+            )).fetchone()
+            if not action:
+                raise NotFound()
+            if (action["status"], action["provider_id"], action["error_code"]) == (status, provider_id, error):
+                return
+            # An uncertain send can acquire a late receipt, but cannot become safe to retry.
+            if action["status"] != "running" and not (action["status"] == "unknown" and status == "succeeded"):
+                raise Conflict("Publication is not awaiting this completion")
             await connection.execute(
                 """UPDATE publication_actions SET status=%s,provider_id=%s,error_code=%s,
                 updated_at=now() WHERE id=%s""", (status, provider_id, error, action_id))
@@ -98,6 +122,15 @@ class Publication:
 
     async def save_kb(self, report):
         async with self.db.transaction() as connection:
+            action = await (await connection.execute(
+                "SELECT status,kind FROM publication_actions WHERE id=%s FOR UPDATE", (report["action_id"],),
+            )).fetchone()
+            if not action or action["kind"] != "kb":
+                raise Conflict("Knowledge publication action is unavailable")
+            if action["status"] == "succeeded":
+                return
+            if action["status"] != "running":
+                raise Conflict("Knowledge publication has not started")
             await self.knowledge.store(connection, report, "approved")
             await connection.execute(
                 "UPDATE publication_actions SET status='succeeded',updated_at=now() WHERE id=%s",

@@ -60,7 +60,7 @@ async def test_provider_errors_have_safe_stable_categories(monkeypatch, exceptio
 
 
 @pytest.mark.parametrize("category", ["rate_limited", "search_failed", "timeout"])
-async def test_blocked_secondary_provider_is_not_retried_and_pending_queries_obey_cooldown(monkeypatch, category):
+async def test_secondary_provider_bounds_retries_and_pending_queries_obey_cooldown(monkeypatch, category):
     calls = []
     provider = DuckDuckGo()
 
@@ -72,12 +72,13 @@ async def test_blocked_secondary_provider_is_not_retried_and_pending_queries_obe
     for query in ["Company identity", "Company products", "Company partners"]:
         with pytest.raises(ProviderFailure):
             await provider.search(query)
-    assert calls == ["Company identity"]
+    attempts = 1 if category == "rate_limited" else 3
+    assert calls == ["Company identity"] * attempts
     # The cooldown is finite: a later run can use the provider again.
     provider.cooldown_until = 0
     with pytest.raises(ProviderFailure):
         await provider.search("Company news")
-    assert calls == ["Company identity", "Company news"]
+    assert calls == ["Company identity"] * attempts + ["Company news"] * attempts
 
 
 @pytest.mark.parametrize("failed_provider", ["tavily", "duckduckgo"])

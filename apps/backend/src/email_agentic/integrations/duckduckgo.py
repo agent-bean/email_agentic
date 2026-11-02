@@ -5,6 +5,7 @@ from ddgs import DDGS
 from ddgs.exceptions import DDGSException, RatelimitException, TimeoutException
 
 from email_agentic.platform.errors import ProviderFailure
+from email_agentic.integrations.http import bounded_retry
 
 
 class DuckDuckGo:
@@ -22,9 +23,15 @@ class DuckDuckGo:
                 raise ProviderFailure("duckduckgo", category="rate_limited")
 
             try:
-                # The unkeyed secondary provider must not delay the primary results
-                # by repeating requests that are already blocked or rate limited.
-                return await self._request(query, news)
+                async def request(remaining):
+                    try:
+                        return await self._request(query, news)
+                    except ProviderFailure as exc:
+                        if exc.category == "rate_limited":
+                            exc.retry_after = 60
+                        raise
+
+                return await bounded_retry(request, 30, provider="duckduckgo", operation_key=f"{news}:{query}")
             except ProviderFailure as exc:
                 if exc.category in {"rate_limited", "search_failed", "timeout"}:
                     self.cooldown_until = asyncio.get_running_loop().time() + 60

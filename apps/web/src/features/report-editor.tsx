@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useBlocker } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
-import { api, type Report, type ReportEdit } from "../lib/api";
+import { endpoints, ApiError, type Report, type ReportEdit } from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import { ErrorMessage } from "../components/status";
 
@@ -9,35 +10,29 @@ export function ReportEditor({
   runId,
   refresh,
   onDirty,
+  readOnly = false,
 }: {
   report: Report;
   runId: string;
   refresh: () => void;
   onDirty: (dirty: boolean) => void;
+  readOnly?: boolean;
 }) {
   const { t } = useI18n();
-  const initial: ReportEdit = {
-    version: report.version,
-    markdown: report.markdown,
-    email_subject: report.email_subject,
-    email_body: report.email_body,
-    recipients: {
-      to: report.recipients.to ?? [],
-      cc: report.recipients.cc ?? [],
-      bcc: report.recipients.bcc ?? [],
-    },
-    send_email: report.send_email,
-    save_kb: report.save_kb,
-    attachment_formats: report.artifacts.map(
-      (a) => a.format as "pdf" | "docx" | "md",
-    ),
-  };
+  const editor = useRef<HTMLDetailsElement>(null);
+  const stayButton = useRef<HTMLButtonElement>(null);
+  const [baseReport, setBaseReport] = useState(report);
+  const [savedId, setSavedId] = useState<string | null>(null);
+  const initial = reportEdit(baseReport);
   const [edit, setEdit] = useState(initial);
-  const [recipientText, setRecipientText] = useState({
-    to: (report.recipients.to ?? []).join(", "),
-    cc: (report.recipients.cc ?? []).join(", "),
-    bcc: (report.recipients.bcc ?? []).join(", "),
-  });
+  const [recipientText, setRecipientText] = useState(recipientFields(baseReport));
+  function adoptLatest() {
+    setBaseReport(report);
+    setEdit(reportEdit(report));
+    setRecipientText(recipientFields(report));
+    setSavedId(null);
+    save.reset();
+  }
   // Keep raw text while typing so commas and spaces are not removed mid-edit.
   const recipients = Object.fromEntries(
     Object.entries(recipientText).map(([kind, text]) => [
@@ -50,73 +45,70 @@ export function ReportEditor({
   );
   const editedReport = { ...edit, recipients };
   const dirty = JSON.stringify(initial) !== JSON.stringify(editedReport);
+  const newerVersion = report.id !== baseReport.id;
+  const blocker = useBlocker(({ currentLocation, nextLocation }) =>
+    dirty && currentLocation.pathname !== nextLocation.pathname);
+  const save = useMutation({
+    mutationFn: () => {
+      if (readOnly) throw new Error(t('Dữ liệu đã hết hạn; không thể lưu.', 'The data has expired; saving is unavailable.'));
+      return endpoints.editReport(runId, editedReport);
+    },
+    onSuccess: (result) => {
+      setSavedId(result.id);
+      refresh();
+    },
+    onError: (error) => {
+      if (isVersionConflict(error)) refresh();
+    },
+  });
+  const conflict = newerVersion || isVersionConflict(save.error);
   useEffect(() => {
-    onDirty(dirty);
+    if ((conflict || (readOnly && dirty) || blocker.state === 'blocked') && editor.current) editor.current.open = true;
+    if (blocker.state === 'blocked') stayButton.current?.focus();
+  }, [conflict, blocker.state, readOnly, dirty]);
+  useEffect(() => {
+    if (newerVersion && (!dirty || (!readOnly && report.id === savedId))) adoptLatest();
+  }, [report, newerVersion, dirty, savedId, readOnly]);
+  useEffect(() => {
+    onDirty(dirty || conflict);
     return () => onDirty(false);
-  }, [dirty, onDirty]);
+  }, [dirty, conflict, onDirty]);
   useEffect(() => {
     if (!dirty) return;
-    const warn = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-    };
-    const guardNavigation = (event: MouseEvent) => {
-      const link =
-        event.target instanceof Element
-          ? event.target.closest("a[href]")
-          : null;
-      if (
-        !(link instanceof HTMLAnchorElement) ||
-        link.target === "_blank" ||
-        event.ctrlKey ||
-        event.metaKey ||
-        event.shiftKey ||
-        event.altKey
-      )
-        return;
-      const target = new URL(link.href);
-      if (
-        target.pathname === window.location.pathname &&
-        target.search === window.location.search
-      )
-        return;
-      if (
-        !window.confirm(
-          t("Có thay đổi chưa lưu. Rời trang và bỏ các thay đổi này?", "You have unsaved changes. Leave this page and discard them?"),
-        )
-      ) {
-        event.preventDefault();
-        event.stopPropagation();
-      }
-    };
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); };
     window.addEventListener("beforeunload", warn);
-    document.addEventListener("click", guardNavigation, true);
-    return () => {
-      window.removeEventListener("beforeunload", warn);
-      document.removeEventListener("click", guardNavigation, true);
-    };
-  }, [dirty, t]);
-  const save = useMutation({
-    mutationFn: () =>
-      api(`/runs/${runId}/report`, {
-        method: "PUT",
-        body: JSON.stringify(editedReport),
-      }),
-    onSuccess: refresh,
-  });
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
   return (
-    <details id="report-editor" className="panel editor">
+    <details ref={editor} id="report-editor" className="panel editor">
       <summary>{t("Chỉnh sửa nội dung & tùy chọn", "Edit content & options")}</summary>
+      {readOnly && <p role="alert" className="notice">{t('Dữ liệu nguồn hoặc báo cáo đã hết hạn lưu. Không thể lưu hoặc gửi bản chỉnh sửa này. Nội dung chưa lưu chỉ còn trong trang hiện tại; hãy sao chép phần cần giữ trước khi rời trang.', 'The source or report retention period has expired. These edits cannot be saved or sent. Unsaved content exists only on this page; copy anything you need before leaving.')}</p>}
+      {readOnly && dirty && <label>{t('Sao chép nội dung chưa lưu', 'Copy unsaved content')}<textarea readOnly rows={12}
+        value={[edit.markdown, edit.email_subject, edit.email_body, ...Object.entries(recipientText).map(([kind, value]) => `${kind.toUpperCase()}: ${value}`)].join('\n\n')} /></label>}
+      {blocker.state === 'blocked' && <section role="alertdialog" aria-label={t('Thay đổi chưa lưu', 'Unsaved changes')}>
+        <p>{t('Rời trang sẽ bỏ các thay đổi chưa lưu.', 'Leaving this page discards your unsaved changes.')}</p>
+        <button ref={stayButton} type="button" onClick={() => blocker.reset()}>{t('Tiếp tục chỉnh sửa', 'Keep editing')}</button>
+        <button type="button" className="secondary" onClick={() => blocker.proceed()}>{t('Bỏ thay đổi và rời trang', 'Discard and leave')}</button>
+      </section>}
+      {conflict && <section role="alert" className="notice">
+        <p>{t('Phiên bản trên máy chủ đã thay đổi. Bản chỉnh sửa của bạn vẫn được giữ, nhưng không thể lưu đè. Sao chép nội dung cần giữ trước khi tải phiên bản mới.', 'The server version has changed. Your edits are preserved but cannot overwrite it. Copy any changes you want to keep before loading the latest version.')}</p>
+        <button type="button" className="secondary" disabled={!newerVersion} onClick={() => {
+          if (!dirty || window.confirm(t('Bỏ thay đổi chưa lưu và tải phiên bản mới?', 'Discard unsaved changes and load the latest version?'))) adoptLatest();
+        }}>{t('Tải phiên bản mới', 'Load latest version')}</button>
+        {!newerVersion && <button type="button" className="secondary" onClick={refresh}>{t('Làm mới', 'Refresh')}</button>}
+      </section>}
+      {savedId && !conflict && <p role="status">{t('Đã lưu. Đang tải phiên bản mới.', 'Saved. Loading the new version.')} <button type="button" className="secondary" onClick={refresh}>{t('Làm mới', 'Refresh')}</button></p>}
       <form
         className="form"
         onSubmit={(e) => {
           e.preventDefault();
-          save.mutate();
+          if (!readOnly && !conflict && !savedId) save.mutate();
         }}
       >
         <p className="muted">
           {t("Lưu sẽ tạo phiên bản mới và yêu cầu duyệt lại. Bản đang chỉnh sửa chưa được dùng để gửi.", "Saving creates a new version that requires approval again. Unsaved edits are not used for sending.")}
         </p>
-        <fieldset disabled={save.isPending}>
+        <fieldset disabled={readOnly || save.isPending || Boolean(savedId)}>
           <legend>{t("Báo cáo · nội bộ", "Report \u00b7 internal")}</legend>
           <label>
             {t("Nội dung Markdown", "Markdown content")}
@@ -127,7 +119,7 @@ export function ReportEditor({
             />
           </label>
         </fieldset>
-        <fieldset disabled={save.isPending}>
+        <fieldset disabled={readOnly || save.isPending || Boolean(savedId)}>
           <legend>{t("Email nháp · gửi khách / đối tác", "Draft email \u00b7 for customers / partners")}</legend>
           <label>
             {t("Tiêu đề email", "Email subject")}
@@ -147,7 +139,7 @@ export function ReportEditor({
             />
           </label>
         </fieldset>
-        <fieldset disabled={save.isPending}>
+        <fieldset disabled={readOnly || save.isPending || Boolean(savedId)}>
           <legend>{t("Người nhận", "Recipients")}</legend>
           <p className="muted">{t("Phân cách các địa chỉ bằng dấu phẩy.", "Separate addresses with commas.")}</p>
           {(["to", "cc", "bcc"] as const).map((key) => (
@@ -164,7 +156,7 @@ export function ReportEditor({
             </label>
           ))}
         </fieldset>
-        <fieldset disabled={save.isPending}>
+        <fieldset disabled={readOnly || save.isPending || Boolean(savedId)}>
           <legend>{t("Sau khi duyệt", "After approval")}</legend>
           <label className="check">
             <input
@@ -185,7 +177,7 @@ export function ReportEditor({
             {t("Lưu báo cáo vào kho tri thức", "Save report to knowledge library")}
           </label>
         </fieldset>
-        <fieldset disabled={save.isPending}>
+        <fieldset disabled={readOnly || save.isPending || Boolean(savedId)}>
           <legend>{t("File đính kèm email", "Email attachments")}</legend>
           <p className="notice">
             {t("Báo cáo chứa phân tích nội bộ. Chỉ chọn đính kèm khi nội dung phù hợp với người nhận. Lưu phiên bản mới rồi mở file bên dưới để kiểm tra trước khi duyệt.", "Reports contain internal analysis. Attach only when the content is suitable for the recipient. Save a new version, then open the file below to review it before approval.")}
@@ -213,11 +205,59 @@ export function ReportEditor({
           <span className="muted" role="status">
             {dirty ? t("Có thay đổi chưa lưu", "Unsaved changes") : t("Chưa có thay đổi", "No changes")}
           </span>
-          <button disabled={save.isPending || !dirty}>
+          <button disabled={readOnly || save.isPending || Boolean(savedId) || !dirty || conflict}>
             {save.isPending ? t("Đang lưu…", "Saving\u2026") : t("Lưu phiên bản mới", "Save new version")}
           </button>
         </div>
       </form>
     </details>
   );
+}
+
+function recipientFields(report: Report) {
+  return {
+    to: (report.recipients.to ?? []).join(", "),
+    cc: (report.recipients.cc ?? []).join(", "),
+    bcc: (report.recipients.bcc ?? []).join(", "),
+  };
+}
+
+function isVersionConflict(error: unknown) {
+  return error instanceof ApiError && error.status === 409 && error.detail === 'Report version changed';
+}
+
+function reportEdit(report: Report): ReportEdit {
+  return {
+    version: report.version,
+    markdown: report.markdown,
+    email_subject: report.email_subject,
+    email_body: report.email_body,
+    recipients: { to: report.recipients.to ?? [], cc: report.recipients.cc ?? [], bcc: report.recipients.bcc ?? [] },
+    send_email: report.send_email,
+    save_kb: report.save_kb,
+    attachment_formats: report.artifacts.map((artifact) => artifact.format),
+  };
+}
+
+// Keep only the currently mounted draft through a retention transition; never persist it.
+export function RetainedReportEditor({ report, readOnly, runId, refresh, onDirty }: {
+  report?: Report;
+  readOnly: boolean;
+  runId: string;
+  refresh: () => void;
+  onDirty: (dirty: boolean) => void;
+}) {
+  const [lastReport, setLastReport] = useState(report);
+  const [dirty, setDirty] = useState(false);
+  const trackDirty = useCallback((value: boolean) => {
+    setDirty(value);
+    onDirty(value);
+  }, [onDirty]);
+  useEffect(() => {
+    if (report) setLastReport(report);
+    else if (!dirty) setLastReport(undefined);
+  }, [report, dirty]);
+  const current = report ?? (dirty ? lastReport : undefined);
+  return current ? <ReportEditor report={current} readOnly={readOnly || !report}
+    runId={runId} refresh={refresh} onDirty={trackDirty} /> : null;
 }
